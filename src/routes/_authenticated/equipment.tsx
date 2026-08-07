@@ -55,7 +55,7 @@ function averageCycleDays(list: Hist[]) {
   if (dates.length < 2) return null;
   let total = 0;
   for (let i = 1; i < dates.length; i++) {
-    total += (new Date(dates[i]).getTime() - new Date(dates[i - 1]).getTime()) / 86400000;
+    total += (new Date(dates[i]!).getTime() - new Date(dates[i - 1]!).getTime()) / 86400000;
   }
   return Math.round(total / (dates.length - 1));
 }
@@ -355,7 +355,7 @@ function EquipmentPage() {
                 <div className="space-y-1.5">
                   <Label>単位</Label>
                   <Select
-                    value={editing.cycle_unit ?? undefined}
+                    {...(editing.cycle_unit ? { value: editing.cycle_unit } : {})}
                     onValueChange={(v) => setEditing({ ...editing, cycle_unit: v as Unit })}
                   >
                     <SelectTrigger className="h-12">
