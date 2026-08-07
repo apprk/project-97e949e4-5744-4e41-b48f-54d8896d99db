@@ -14,16 +14,295 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_settings: {
+        Row: {
+          password_skip_days: number
+          trash_retention_days: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          password_skip_days?: number
+          trash_retention_days?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          password_skip_days?: number
+          trash_retention_days?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      equipment: {
+        Row: {
+          content: string | null
+          created_at: string
+          cycle_unit: string | null
+          cycle_value: number | null
+          deleted_at: string | null
+          first_date: string | null
+          id: string
+          name: string
+          next_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          cycle_unit?: string | null
+          cycle_value?: number | null
+          deleted_at?: string | null
+          first_date?: string | null
+          id?: string
+          name: string
+          next_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          cycle_unit?: string | null
+          cycle_value?: number | null
+          deleted_at?: string | null
+          first_date?: string | null
+          id?: string
+          name?: string
+          next_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      equipment_history: {
+        Row: {
+          comment: string | null
+          created_at: string
+          deleted_at: string | null
+          equipment_id: string
+          id: string
+          performed_on: string
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          equipment_id: string
+          id?: string
+          performed_on: string
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          equipment_id?: string
+          id?: string
+          performed_on?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_history_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_folders: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      photos: {
+        Row: {
+          comment: string | null
+          created_at: string
+          deleted_at: string | null
+          folder_id: string | null
+          history_id: string | null
+          id: string
+          schedule_id: string | null
+          storage_path: string
+          taken_at: string
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          folder_id?: string | null
+          history_id?: string | null
+          id?: string
+          schedule_id?: string | null
+          storage_path: string
+          taken_at?: string
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          folder_id?: string | null
+          history_id?: string | null
+          id?: string
+          schedule_id?: string | null
+          storage_path?: string
+          taken_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photos_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "photo_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_history_id_fkey"
+            columns: ["history_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          name: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      schedules: {
+        Row: {
+          comment_category: string | null
+          created_at: string
+          deleted_at: string | null
+          entry_date: string
+          id: string
+          new_effort: string | null
+          operation_comment: string | null
+          personal_plan: string | null
+          quality: string | null
+          repair_item: string | null
+          size: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          entry_date: string
+          id?: string
+          new_effort?: string | null
+          operation_comment?: string | null
+          personal_plan?: string | null
+          quality?: string | null
+          repair_item?: string | null
+          size?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          entry_date?: string
+          id?: string
+          new_effort?: string | null
+          operation_comment?: string | null
+          personal_plan?: string | null
+          quality?: string | null
+          repair_item?: string | null
+          size?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +429,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
