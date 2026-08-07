@@ -21,14 +21,13 @@ export const Route = createFileRoute("/auth")({
 
 async function bootstrapAdmin() {
   const email = slugToEmail("admin");
-  const { data, error } = await supabase.auth.signUp({
+  const { error } = await supabase.auth.signUp({
     email,
     password: pinToPassword("0000"),
-    options: { emailRedirectTo: window.location.origin },
+    options: { emailRedirectTo: window.location.origin, data: { name: "管理者", slug: "admin" } },
   });
-  if (error || !data.user) return;
-  await supabase.from("profiles").insert({ id: data.user.id, name: "管理者", slug: "admin" });
-  await supabase.from("user_roles").insert({ user_id: data.user.id, role: "admin" });
+  if (error) return;
+  // プロフィールと管理者権限はデータベーストリガーが自動作成する
   await supabase.auth.signOut();
 }
 

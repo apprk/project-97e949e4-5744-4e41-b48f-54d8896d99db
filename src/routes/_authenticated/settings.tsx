@@ -30,7 +30,7 @@ const SKIP_OPTIONS = [
 ];
 
 function SettingsPage() {
-  const { profile, isAdmin, session } = useAuth();
+  const { profile, isAdmin, session, signOut } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [skip, setSkip] = useState("0");
@@ -105,20 +105,22 @@ function SettingsPage() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: slugToEmail(newSlug),
       password: pinToPassword(newPin),
       options: { emailRedirectTo: window.location.origin, data: { name: newName.trim(), slug: newSlug } },
     });
     setBusy(false);
-    if (error || !data.user) {
+    if (error) {
       toast.error("追加に失敗しました（IDが重複している可能性があります）");
       return;
     }
-    toast.success(`${newName} を追加しました。次回ログイン時に選択できます。`);
     setNewName("");
     setNewSlug("");
     setNewPin("");
+    // 追加直後は新しいアカウントのセッションになるため、管理者で再ログインしてもらう
+    await signOut();
+    toast.success("アカウントを追加しました。管理者で再ログインしてください。");
   };
 
   return (
