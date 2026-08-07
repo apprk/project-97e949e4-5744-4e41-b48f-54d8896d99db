@@ -145,3 +145,23 @@
     color: var(--color-foreground);
   }
 }
+
+@theme inline {
+  --font-sans:
+    "Noto Sans JP", ui-sans-serif, system-ui, sans-serif;
+  --color-gradient-header: var(--gradient-header);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+  }
+}
+
+@utility app-header {
+  background-image: var(--gradient-header);
+}
+
+@utility tile-shadow {
+  box-shadow: var(--shadow-tile);
+}
