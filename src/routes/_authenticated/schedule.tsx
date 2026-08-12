@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { FileDown, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, Loader2, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
@@ -9,16 +9,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DIARY_HEADERS, exportCsv, exportPdf, exportScheduleExcel } from "@/lib/exporters";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
   head: () => ({
     meta: [
-      { title: "スケジュール管理 | 三条工場 業務管理" },
-      { name: "description", content: "日付ごとの申し送り入力とExcel・CSV・PDF出力。" },
-      { property: "og:title", content: "スケジュール管理 | 三条工場 業務管理" },
-      { property: "og:description", content: "日付ごとの申し送り入力とExcel・CSV・PDF出力。" },
+      { title: "スケジュール | 三条工場 業務管理" },
+      { name: "description", content: "日付ごとの申し送りを一覧で確認し、Excel・CSV・PDFへ出力します。" },
+      { property: "og:title", content: "スケジュール | 三条工場 業務管理" },
+      { property: "og:description", content: "日付ごとの申し送りを一覧で確認し、Excel・CSV・PDFへ出力します。" },
     ],
   }),
   component: SchedulePage,
@@ -50,21 +56,37 @@ const empty = (date: string): Schedule => ({
   personal_plan: "",
 });
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** 旧データの「コメント分類」はサイズへ統合して表示する */
+const mergedSize = (r: Schedule) => [r.size, r.comment_category].filter((v) => v && v.trim()).join(" ");
 
 const FIELDS: { key: keyof Schedule; label: string; multiline?: boolean }[] = [
-  { key: "size", label: "サイズ" },
-  { key: "comment_category", label: "コメント分類" },
-  { key: "operation_comment", label: "操業コメント／出来事のポイント", multiline: true },
-  { key: "repair_item", label: "故障／運休状況／修理項目", multiline: true },
-  { key: "new_effort", label: "新たな取組／MY／次回確認", multiline: true },
-  { key: "quality", label: "品質", multiline: true },
+  { key: "operation_comment", label: "操業コメント", multiline: true },
+  { key: "repair_item", label: "修理項目", multiline: true },
+  { key: "new_effort", label: "その他予定", multiline: true },
   { key: "personal_plan", label: "個人予定", multiline: true },
 ];
+
+const COLUMNS: { key: keyof Schedule; label: string; width: string }[] = [
+  { key: "operation_comment", label: "操業コメント", width: "min-w-56" },
+  { key: "repair_item", label: "修理項目", width: "min-w-40" },
+  { key: "new_effort", label: "その他予定", width: "min-w-40" },
+  { key: "personal_plan", label: "個人予定", width: "min-w-40" },
+];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const monthKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
+
+function daysOfMonth(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const last = new Date(y!, m!, 0).getDate();
+  return Array.from({ length: last }, (_, i) => `${key}-${pad(i + 1)}`);
+}
 
 function SchedulePage() {
   const { session } = useAuth();
   const [rows, setRows] = useState<Schedule[] | null>(null);
+  const [month, setMonth] = useState(() => monthKey(new Date()));
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -82,6 +104,19 @@ function SchedulePage() {
     void load();
   }, []);
 
+  const byDate = useMemo(() => {
+    const map: Record<string, Schedule> = {};
+    (rows ?? []).forEach((r) => {
+      if (!map[r.entry_date]) map[r.entry_date] = r;
+    });
+    return map;
+  }, [rows]);
+
+  const shiftMonth = (delta: number) => {
+    const [y, m] = month.split("-").map(Number);
+    setMonth(monthKey(new Date(y!, m! - 1 + delta, 1)));
+  };
+
   const save = async () => {
     if (!editing || !session) return;
     setSaving(true);
@@ -89,7 +124,7 @@ function SchedulePage() {
       user_id: session.user.id,
       entry_date: editing.entry_date,
       size: editing.size,
-      comment_category: editing.comment_category,
+      comment_category: null,
       operation_comment: editing.operation_comment,
       repair_item: editing.repair_item,
       new_effort: editing.new_effort,
@@ -122,80 +157,109 @@ function SchedulePage() {
 
   const csv = useMemo(
     () => ({
-      headers: ["日時", ...DIARY_HEADERS, "個人予定"],
-      body: (rows ?? []).map((r) => [
-        r.entry_date,
-        r.size,
-        r.comment_category,
-        r.operation_comment,
-        r.repair_item,
-        r.new_effort,
-        r.quality,
-        r.personal_plan,
-      ]),
+      headers: ["日付", "サイズ", "操業コメント", "修理項目", "その他予定", "個人予定"],
+      body: (rows ?? [])
+        .slice()
+        .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
+        .map((r) => [r.entry_date, mergedSize(r), r.operation_comment, r.repair_item, r.new_effort, r.personal_plan]),
     }),
     [rows],
   );
 
+  const days = daysOfMonth(month);
+
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title="スケジュール管理" />
-      <main className="mx-auto max-w-5xl px-4 pb-24 pt-4">
-        <div className="flex flex-wrap gap-2">
-          <Button size="lg" className="h-12 flex-1" onClick={() => setEditing(empty(today()))}>
-            <Plus className="size-5" /> 新しい日付を入力
-          </Button>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" className="bg-card" onClick={() => exportScheduleExcel(rows ?? [])}>
-            <FileDown className="size-4" /> Excel出力
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-card"
-            onClick={() => exportCsv(csv.headers, csv.body, "スケジュール.csv")}
-          >
-            <FileDown className="size-4" /> CSV出力
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-card"
-            onClick={() => exportPdf("三条工場 申し送り", csv.headers, csv.body as (string | null)[][])}
-          >
-            <FileDown className="size-4" /> PDF出力
-          </Button>
+      <AppHeader title="スケジュール" />
+      <main className="mx-auto max-w-6xl px-3 pb-24 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => shiftMonth(-1)}>
+              <ChevronLeft className="size-5" />
+            </Button>
+            <span className="min-w-28 text-center text-base font-bold">{month.replace("-", "年")}月</span>
+            <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => shiftMonth(1)}>
+              <ChevronRight className="size-5" />
+            </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                <FileDown className="size-4" /> 出力
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportScheduleExcel(rows ?? [])}>Excel</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportCsv(csv.headers, csv.body, "スケジュール.csv")}>
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => exportPdf("三条工場 申し送り", csv.headers, csv.body as (string | null)[][])}
+              >
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {rows === null ? (
           <div className="flex justify-center py-12">
             <Loader2 className="size-6 animate-spin text-primary" />
           </div>
-        ) : rows.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">まだ登録がありません。</p>
         ) : (
-          <ul className="mt-4 space-y-2">
-            {rows.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => setEditing(r)}
-                  className="w-full rounded-xl border border-border bg-card px-4 py-4 text-left transition-transform active:scale-[0.99]"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-base font-bold">{r.entry_date}</span>
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                      {r.size || "サイズ未入力"}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                    {r.operation_comment || r.repair_item || "（コメントなし）"}
-                  </p>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card">
+            <table className="w-full min-w-[860px] border-collapse text-left text-[13px]">
+              <thead className="bg-secondary text-secondary-foreground">
+                <tr>
+                  <th className="sticky left-0 z-10 w-24 border-b border-border bg-secondary px-2 py-2 font-bold">
+                    日付
+                  </th>
+                  <th className="w-28 border-b border-border px-2 py-2 font-bold">サイズ</th>
+                  {COLUMNS.map((c) => (
+                    <th key={c.key} className={`border-b border-border px-2 py-2 font-bold ${c.width}`}>
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => {
+                  const r = byDate[d];
+                  const wd = new Date(d + "T00:00:00").getDay();
+                  return (
+                    <tr
+                      key={d}
+                      onClick={() => setEditing(r ?? empty(d))}
+                      className={`cursor-pointer border-b border-border align-top transition-colors hover:bg-secondary/40 ${
+                        r ? "" : "bg-muted/40"
+                      }`}
+                    >
+                      <th
+                        scope="row"
+                        className={`sticky left-0 z-10 whitespace-nowrap border-r border-border px-2 py-2 text-left font-bold ${
+                          r ? "bg-card" : "bg-muted/60"
+                        } ${wd === 0 ? "text-destructive" : wd === 6 ? "text-primary" : ""}`}
+                      >
+                        {Number(d.slice(8))}日（{WEEK[wd]}）
+                      </th>
+                      <td className="border-r border-border px-2 py-2 whitespace-pre-wrap">
+                        {r ? mergedSize(r) : <span className="text-xs text-muted-foreground">未入力</span>}
+                      </td>
+                      {COLUMNS.map((c) => (
+                        <td key={c.key} className="border-r border-border px-2 py-2 whitespace-pre-wrap">
+                          {r ? ((r[c.key] as string) ?? "") : ""}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
+        <p className="mt-2 text-xs text-muted-foreground">
+          灰色の行は未入力の日です。日付をタップすると入力・編集できます。
+        </p>
       </main>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
@@ -213,6 +277,15 @@ function SchedulePage() {
                   className="h-12"
                   value={editing.entry_date}
                   onChange={(e) => setEditing({ ...editing, entry_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="size">サイズ（例：1日　連操 / 0.5日 / 休日）</Label>
+                <Input
+                  id="size"
+                  className="h-12"
+                  value={mergedSize(editing)}
+                  onChange={(e) => setEditing({ ...editing, size: e.target.value, comment_category: "" })}
                 />
               </div>
               {FIELDS.map((f) => (
