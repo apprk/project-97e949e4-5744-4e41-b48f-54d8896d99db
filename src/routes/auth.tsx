@@ -84,7 +84,11 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title="アカウント" back="/" />
+      <header className="app-header text-primary-foreground shadow-md">
+        <div className="mx-auto max-w-md px-4 py-5">
+          <h1 className="text-2xl font-bold tracking-wide">業務管理</h1>
+        </div>
+      </header>
       <main className="mx-auto max-w-md px-4 pb-16 pt-6">
         {!selected ? (
           <>
