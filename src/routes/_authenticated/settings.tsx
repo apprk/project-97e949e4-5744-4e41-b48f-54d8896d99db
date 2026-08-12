@@ -202,6 +202,18 @@ function SettingsPage() {
         {isAdmin ? (
           <section className="rounded-2xl border border-border bg-card p-4">
             <h2 className="flex items-center gap-2 text-base font-bold">
+              <Trash2 className="size-5 text-primary" /> ごみ箱（管理者）
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">削除したデータの復元・完全削除ができます。</p>
+            <Button asChild variant="outline" className="mt-3 h-12 w-full bg-card">
+              <Link to="/trash">ごみ箱を開く</Link>
+            </Button>
+          </section>
+        ) : null}
+
+        {isAdmin ? (
+          <section className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="flex items-center gap-2 text-base font-bold">
               <UserPlus className="size-5 text-primary" /> アカウント管理（管理者）
             </h2>
             <div className="mt-3 space-y-3">
