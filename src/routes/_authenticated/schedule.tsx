@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DIARY_HEADERS, exportCsv, exportPdf, exportScheduleExcel } from "@/lib/exporters";
+import { exportCsv, exportPdf, exportScheduleExcel } from "@/lib/exporters";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
