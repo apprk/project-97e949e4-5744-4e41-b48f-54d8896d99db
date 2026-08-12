@@ -1,10 +1,10 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, LogOut, Settings, UserRound } from "lucide-react";
+import { ArrowLeft, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
 export function AppHeader({ title, back = "/" }: { title: string; back?: string }) {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const router = useRouter();
 
   return (

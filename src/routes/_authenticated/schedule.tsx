@@ -177,7 +177,7 @@ function SchedulePage() {
             <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => shiftMonth(-1)}>
               <ChevronLeft className="size-5" />
             </Button>
-            <span className="min-w-28 text-center text-base font-bold">{month.replace("-", "年")}月</span>
+            <span className="min-w-28 text-center text-base font-bold">{`${month.slice(0, 4)}年${Number(month.slice(5))}月`}</span>
             <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => shiftMonth(1)}>
               <ChevronRight className="size-5" />
             </Button>
