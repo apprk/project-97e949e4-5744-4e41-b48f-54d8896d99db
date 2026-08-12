@@ -115,6 +115,45 @@ export type Database = {
           },
         ]
       }
+      photo_folder_items: {
+        Row: {
+          created_at: string
+          folder_id: string
+          id: string
+          photo_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          id?: string
+          photo_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          id?: string
+          photo_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_folder_items_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "photo_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_folder_items_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       photo_folders: {
         Row: {
           created_at: string
@@ -141,6 +180,7 @@ export type Database = {
       }
       photos: {
         Row: {
+          checked: boolean
           comment: string | null
           created_at: string
           deleted_at: string | null
@@ -153,6 +193,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          checked?: boolean
           comment?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -165,6 +206,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          checked?: boolean
           comment?: string | null
           created_at?: string
           deleted_at?: string | null

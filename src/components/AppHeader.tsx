@@ -1,10 +1,10 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, LogOut, Settings, UserRound } from "lucide-react";
+import { ArrowLeft, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
 export function AppHeader({ title, back = "/" }: { title: string; back?: string }) {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const router = useRouter();
 
   return (
@@ -19,11 +19,7 @@ export function AppHeader({ title, back = "/" }: { title: string; back?: string 
         ) : null}
         <h1 className="flex-1 truncate text-lg font-bold tracking-wide">{title}</h1>
         {profile ? (
-          <span className="hidden items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-xs font-medium sm:flex">
-            <UserRound className="size-3.5" />
-            {profile.name}
-            {isAdmin ? "（管理者）" : ""}
-          </span>
+          <span className="hidden text-[11px] opacity-90 sm:inline">{profile.name} - ログイン中</span>
         ) : null}
         <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
           <Link to="/settings" aria-label="設定">

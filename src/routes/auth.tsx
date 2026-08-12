@@ -4,7 +4,6 @@ import { Delete, Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { AppHeader } from "@/components/AppHeader";
 import { pinToPassword, rememberLogin, slugToEmail, useAuth, type Profile } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth")({
@@ -84,7 +83,11 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title="アカウント" back="/" />
+      <header className="app-header text-primary-foreground shadow-md">
+        <div className="mx-auto max-w-md px-4 py-5">
+          <h1 className="text-2xl font-bold tracking-wide">業務管理</h1>
+        </div>
+      </header>
       <main className="mx-auto max-w-md px-4 pb-16 pt-6">
         {!selected ? (
           <>
