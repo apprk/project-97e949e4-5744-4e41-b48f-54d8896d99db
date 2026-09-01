@@ -55,6 +55,84 @@ export function exportScheduleExcel(rows: ScheduleRow[], fileName = "三条工�
   XLSX.writeFile(wb, fileName);
 }
 
+/** 申し送りFile読込用：許可ファイル名 */
+export const IMPORT_FILE_NAME = "三条工場申し送りFile.xlsx";
+
+export type ImportedRow = {
+  entry_date: string;
+  size?: string;
+  comment_category?: string;
+  operation_comment?: string;
+  repair_item?: string;
+  new_effort?: string;
+  quality?: string;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+function toDateString(v: unknown): string | null {
+  if (v instanceof Date) return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
+  const s = String(v ?? "").trim();
+  const m = s.match(/(\d{4})[/年.-](\d{1,2})[/月.-](\d{1,2})/);
+  if (m) return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
+  return null;
+}
+
+const KEYMAP: { key: keyof ImportedRow; test: RegExp }[] = [
+  { key: "size", test: /ｻｲｽﾞ|サイズ/ },
+  { key: "comment_category", test: /ｺﾒﾝﾄ分類|コメント分類/ },
+  { key: "operation_comment", test: /操業/ },
+  { key: "repair_item", test: /修理|故障|運休/ },
+  { key: "new_effort", test: /新た|取組|次回|MY/ },
+  { key: "quality", test: /品質/ },
+];
+
+/** 「三条工場申し送りFile.xlsx」を読み込み、日付ごとの入力値を返す */
+export async function parseScheduleExcel(file: File): Promise<ImportedRow[]> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { cellDates: true });
+  const out: ImportedRow[] = [];
+  wb.SheetNames.forEach((name) => {
+    const ws = wb.Sheets[name];
+    if (!ws) return;
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
+    let colMap: Partial<Record<keyof ImportedRow, number>> = {};
+    let dateCol = 0;
+    aoa.forEach((row) => {
+      if (!row) return;
+      const texts = row.map((c) => String(c ?? "").trim());
+      const isHeader = texts.some((t) => /ｻｲｽﾞ|サイズ/.test(t)) || texts.some((t) => /ｺﾒﾝﾄ分類|コメント分類/.test(t));
+      if (isHeader) {
+        colMap = {};
+        texts.forEach((t, i) => {
+          if (/日時|日付/.test(t)) dateCol = i;
+          KEYMAP.forEach((k) => {
+            if (colMap[k.key] === undefined && t && k.test.test(t)) colMap[k.key] = i;
+          });
+        });
+        return;
+      }
+      const date = toDateString(row[dateCol]);
+      if (!date) return;
+      const rec: ImportedRow = { entry_date: date };
+      let has = false;
+      (Object.keys(colMap) as (keyof ImportedRow)[]).forEach((k) => {
+        if (k === "entry_date") return;
+        const idx = colMap[k];
+        if (idx === undefined) return;
+        const val = String(row[idx] ?? "").trim();
+        if (val) {
+          rec[k] = val;
+          has = true;
+        }
+      });
+      if (has) out.push(rec);
+    });
+  });
+  return out;
+}
+
+
 export function exportCsv(headers: string[], rows: (string | number | null | undefined)[][], fileName: string) {
   const esc = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const csv = [headers.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))].join("\r\n");
