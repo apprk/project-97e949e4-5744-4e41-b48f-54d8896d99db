@@ -241,7 +241,9 @@ function SchedulePage() {
     let ok = 0;
     for (const r of importRows) {
       const { entry_date, ...fields } = r;
-      const payload = Object.fromEntries(Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""));
+      const payload = Object.fromEntries(
+        Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
+      ) as Partial<Record<FieldKey | "quality", string>>;
       if (Object.keys(payload).length === 0) continue;
       const existing = byDate[entry_date];
       const { error } = existing
