@@ -132,11 +132,10 @@ function SchedulePage() {
     setSaving(true);
     const existing = byDate[cell.date];
     const value = cell.value.trim() === "" ? null : cell.value;
+    const patch = { [cell.key]: value } as Partial<Record<FieldKey, string | null>>;
     const { error } = existing
-      ? await supabase.from("schedules").update({ [cell.key]: value }).eq("id", existing.id)
-      : await supabase
-          .from("schedules")
-          .insert({ user_id: session.user.id, entry_date: cell.date, [cell.key]: value });
+      ? await supabase.from("schedules").update(patch).eq("id", existing.id)
+      : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date: cell.date, ...patch });
     setSaving(false);
     if (error) {
       toast.error("保存に失敗しました");
@@ -242,7 +241,9 @@ function SchedulePage() {
     let ok = 0;
     for (const r of importRows) {
       const { entry_date, ...fields } = r;
-      const payload = Object.fromEntries(Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""));
+      const payload = Object.fromEntries(
+        Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
+      ) as Partial<Record<FieldKey | "quality", string>>;
       if (Object.keys(payload).length === 0) continue;
       const existing = byDate[entry_date];
       const { error } = existing
