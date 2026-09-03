@@ -1,137 +1,165 @@
 import * as XLSX from "xlsx";
 
-/** 申し送りFileの列順（既存Excelフォーマットを変更しない） */
+/**
+ * 申し送りFileの列構成（A〜H列）。この対応関係を入出力で共通に使う。
+ * A:日付 B:曜日 C:サイズ D:コメント分類 E:操業コメント F:修理項目 G:その他予定 H:個人予定
+ */
+export const FIELD_BY_COLUMN = [
+  null, // A 日付
+  null, // B 曜日
+  "size",
+  "comment_category",
+  "operation_comment",
+  "repair_item",
+  "new_effort",
+  "personal_plan",
+] as const;
+
+export type ScheduleField = Exclude<(typeof FIELD_BY_COLUMN)[number], null>;
+
 export const DIARY_HEADERS = [
-  "ｻｲｽﾞ",
-  "ｺﾒﾝﾄ分類",
-  "操業ｺﾒﾝﾄ／出来事のﾎﾟｲﾝﾄ",
-  "故障/運休状況/修理項目",
-  "新たな取組/MY/次回確認",
-  "品質",
+  "日付",
+  "曜日",
+  "サイズ",
+  "コメント分類",
+  "操業コメント",
+  "修理項目",
+  "その他予定",
+  "個人予定",
 ] as const;
 
 export type ScheduleRow = {
   entry_date: string;
-  size: string | null;
-  comment_category: string | null;
-  operation_comment: string | null;
-  repair_item: string | null;
-  new_effort: string | null;
-  quality: string | null;
+  size?: string | null;
+  comment_category?: string | null;
+  operation_comment?: string | null;
+  repair_item?: string | null;
+  new_effort?: string | null;
   personal_plan?: string | null;
 };
 
+/** インポート対象の最小年度（diary22 = 2022年） */
+export const IMPORT_MIN_YEAR = 2022;
+/** 読込を許可するファイル名 */
+export const IMPORT_FILE_NAME = "三条工場申し送りFile.xlsx";
+/** データ開始行（0始まり。3行目＝index 2） */
+const DATA_START_ROW = 2;
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 const cell = (v: string | null | undefined) => v ?? "";
 
+function daysOfYear(year: number) {
+  const out: string[] = [];
+  const d = new Date(year, 0, 1);
+  while (d.getFullYear() === year) {
+    out.push(`${year}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/** 1年分のシート（3行目＝1月1日、以降1日ずつ） */
 function diarySheet(rows: ScheduleRow[], year: number) {
-  const aoa: (string | number)[][] = [[`日時${year}`, ...DIARY_HEADERS]];
-  rows
-    .filter((r) => new Date(r.entry_date).getFullYear() === year)
-    .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
-    .forEach((r) => {
-      aoa.push([
-        r.entry_date,
-        cell(r.size),
-        cell(r.comment_category),
-        cell(r.operation_comment),
-        cell(r.repair_item),
-        cell(r.new_effort),
-        cell(r.quality),
-      ]);
-    });
+  const map = new Map<string, ScheduleRow>();
+  rows.forEach((r) => {
+    if (r.entry_date.startsWith(String(year))) map.set(r.entry_date, r);
+  });
+  const aoa: (string | number)[][] = [[`三条工場申し送りFile ${year}年`], [...DIARY_HEADERS]];
+  daysOfYear(year).forEach((date) => {
+    const r = map.get(date);
+    const wd = WEEK[new Date(date + "T00:00:00").getDay()]!;
+    aoa.push([
+      date,
+      wd,
+      cell(r?.size),
+      cell(r?.comment_category),
+      cell(r?.operation_comment),
+      cell(r?.repair_item),
+      cell(r?.new_effort),
+      cell(r?.personal_plan),
+    ]);
+  });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 44 }, { wch: 32 }, { wch: 32 }, { wch: 32 }];
+  ws["!cols"] = [
+    { wch: 12 },
+    { wch: 6 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 44 },
+    { wch: 32 },
+    { wch: 28 },
+    { wch: 28 },
+  ];
   return ws;
 }
 
-/** 既存フォーマット（年ごとの diaryNN シート）でExcel出力 */
-export function exportScheduleExcel(rows: ScheduleRow[], fileName = "三条工場申し送りFile.xlsx") {
-  const years = [...new Set(rows.map((r) => new Date(r.entry_date).getFullYear()))].sort();
-  const wb = XLSX.utils.book_new();
+/** 既存フォーマット（diaryNN シート）でExcel出力 */
+export function exportScheduleExcel(rows: ScheduleRow[], fileName = IMPORT_FILE_NAME) {
+  const years = [...new Set(rows.map((r) => Number(r.entry_date.slice(0, 4))))].filter(Boolean).sort();
   if (years.length === 0) years.push(new Date().getFullYear());
+  const wb = XLSX.utils.book_new();
   years.forEach((y) => {
     XLSX.utils.book_append_sheet(wb, diarySheet(rows, y), `diary${String(y).slice(2)}`);
   });
   XLSX.writeFile(wb, fileName);
 }
 
-/** 申し送りFile読込用：許可ファイル名 */
-export const IMPORT_FILE_NAME = "三条工場申し送りFile.xlsx";
+export type ImportedRow = { entry_date: string } & Partial<Record<ScheduleField, string>>;
 
-export type ImportedRow = {
-  entry_date: string;
-  size?: string;
-  comment_category?: string;
-  operation_comment?: string;
-  repair_item?: string;
-  new_effort?: string;
-  quality?: string;
-};
+function sheetYear(name: string): number | null {
+  const m = name.trim().match(/^diary\s*(\d{2})$/i);
+  if (!m) return null;
+  return 2000 + Number(m[1]);
+}
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-function toDateString(v: unknown): string | null {
+function toDateString(v: unknown, year: number): string | null {
   if (v instanceof Date) return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
   const s = String(v ?? "").trim();
-  const m = s.match(/(\d{4})[/年.-](\d{1,2})[/月.-](\d{1,2})/);
-  if (m) return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
+  if (!s) return null;
+  const full = s.match(/(\d{4})[/年.-](\d{1,2})[/月.-](\d{1,2})/);
+  if (full) return `${full[1]}-${pad2(Number(full[2]))}-${pad2(Number(full[3]))}`;
+  const md = s.match(/^(\d{1,2})[/月.-](\d{1,2})/);
+  if (md) return `${year}-${pad2(Number(md[1]))}-${pad2(Number(md[2]))}`;
   return null;
 }
 
-const KEYMAP: { key: keyof ImportedRow; test: RegExp }[] = [
-  { key: "size", test: /ｻｲｽﾞ|サイズ/ },
-  { key: "comment_category", test: /ｺﾒﾝﾄ分類|コメント分類/ },
-  { key: "operation_comment", test: /操業/ },
-  { key: "repair_item", test: /修理|故障|運休/ },
-  { key: "new_effort", test: /新た|取組|次回|MY/ },
-  { key: "quality", test: /品質/ },
-];
-
-/** 「三条工場申し送りFile.xlsx」を読み込み、日付ごとの入力値を返す */
+/**
+ * 「三条工場申し送りFile.xlsx」を読み込む。
+ * シート名 diaryNN を西暦(20NN)として扱い、3行目以降・A〜H列を固定の対応で取り込む。
+ */
 export async function parseScheduleExcel(file: File): Promise<ImportedRow[]> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { cellDates: true });
   const out: ImportedRow[] = [];
   wb.SheetNames.forEach((name) => {
+    const year = sheetYear(name);
+    if (year === null || year < IMPORT_MIN_YEAR) return;
     const ws = wb.Sheets[name];
     if (!ws) return;
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
-    let colMap: Partial<Record<keyof ImportedRow, number>> = {};
-    let dateCol = 0;
-    aoa.forEach((row) => {
-      if (!row) return;
-      const texts = row.map((c) => String(c ?? "").trim());
-      const isHeader = texts.some((t) => /ｻｲｽﾞ|サイズ/.test(t)) || texts.some((t) => /ｺﾒﾝﾄ分類|コメント分類/.test(t));
-      if (isHeader) {
-        colMap = {};
-        texts.forEach((t, i) => {
-          if (/日時|日付/.test(t)) dateCol = i;
-          KEYMAP.forEach((k) => {
-            if (colMap[k.key] === undefined && t && k.test.test(t)) colMap[k.key] = i;
-          });
-        });
-        return;
-      }
-      const date = toDateString(row[dateCol]);
-      if (!date) return;
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, defval: null, blankrows: true });
+    const dates = daysOfYear(year);
+    for (let i = DATA_START_ROW; i < aoa.length; i += 1) {
+      const row = aoa[i];
+      if (!row) continue;
+      // A列の日付を優先。空欄なら「3行目＝1月1日」の並び順から補完する
+      const date = toDateString(row[0], year) ?? dates[i - DATA_START_ROW] ?? null;
+      if (!date || !date.startsWith(String(year))) continue;
       const rec: ImportedRow = { entry_date: date };
       let has = false;
-      (Object.keys(colMap) as (keyof ImportedRow)[]).forEach((k) => {
-        if (k === "entry_date") return;
-        const idx = colMap[k];
-        if (idx === undefined) return;
-        const val = String(row[idx] ?? "").trim();
+      FIELD_BY_COLUMN.forEach((field, col) => {
+        if (!field) return;
+        const val = String(row[col] ?? "").trim();
         if (val) {
-          rec[k] = val;
+          rec[field] = val;
           has = true;
         }
       });
       if (has) out.push(rec);
-    });
+    }
   });
   return out;
 }
-
 
 export function exportCsv(headers: string[], rows: (string | number | null | undefined)[][], fileName: string) {
   const esc = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
