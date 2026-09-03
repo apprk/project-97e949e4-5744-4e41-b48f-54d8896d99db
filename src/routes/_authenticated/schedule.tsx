@@ -1,15 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileDown, FileUp, Loader2, Save, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, FileDown, FileUp, Loader2, Palette, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,16 +24,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { exportCsv, exportPdf, exportScheduleExcel, parseScheduleExcel, IMPORT_FILE_NAME } from "@/lib/exporters";
-import type { ImportedRow } from "@/lib/exporters";
+import type { ImportedRow, ScheduleField } from "@/lib/exporters";
+import { isDefaultGray } from "@/lib/holidays";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
   head: () => ({
     meta: [
       { title: "スケジュール | 三条工場 業務管理" },
-      { name: "description", content: "日付ごとの申し送りを一覧で確認し、Excel・CSV・PDFへ出力します。" },
+      { name: "description", content: "日付ごとの申し送りを一覧で直接入力し、Excel・CSV・PDFへ出力します。" },
       { property: "og:title", content: "スケジュール | 三条工場 業務管理" },
-      { property: "og:description", content: "日付ごとの申し送りを一覧で確認し、Excel・CSV・PDFへ出力します。" },
+      { property: "og:description", content: "日付ごとの申し送りを一覧で直接入力し、Excel・CSV・PDFへ出力します。" },
     ],
   }),
   component: SchedulePage,
@@ -44,32 +42,36 @@ export const Route = createFileRoute("/_authenticated/schedule")({
 
 type Schedule = {
   id: string;
-  user_id: string;
   entry_date: string;
   size: string | null;
   comment_category: string | null;
   operation_comment: string | null;
   repair_item: string | null;
   new_effort: string | null;
-  quality: string | null;
   personal_plan: string | null;
 };
 
-type FieldKey = "size" | "comment_category" | "operation_comment" | "repair_item" | "new_effort" | "personal_plan";
-
-const COLUMNS: { key: FieldKey; label: string; width: string; multiline?: boolean }[] = [
-  { key: "size", label: "サイズ", width: "min-w-24" },
-  { key: "comment_category", label: "コメント分類", width: "min-w-28" },
-  { key: "operation_comment", label: "操業コメント", width: "min-w-56", multiline: true },
-  { key: "repair_item", label: "修理項目", width: "min-w-40", multiline: true },
-  { key: "new_effort", label: "その他予定", width: "min-w-40", multiline: true },
-  { key: "personal_plan", label: "個人予定", width: "min-w-40", multiline: true },
+const COLUMNS: { key: ScheduleField; label: string; defaultWidth: number }[] = [
+  { key: "size", label: "サイズ", defaultWidth: 92 },
+  { key: "comment_category", label: "コメント分類", defaultWidth: 116 },
+  { key: "operation_comment", label: "操業コメント", defaultWidth: 300 },
+  { key: "repair_item", label: "修理項目", defaultWidth: 200 },
+  { key: "new_effort", label: "その他予定", defaultWidth: 190 },
+  { key: "personal_plan", label: "個人予定", defaultWidth: 190 },
 ];
 
-const DAY_OPTIONS = Array.from({ length: 14 }, (_, i) => `${((i + 1) / 10).toFixed(1)}日`);
+const DATE_COL_KEY = "__date";
+const DEFAULT_DATE_WIDTH = 104;
+const DEFAULT_ROW_HEIGHT = 40;
+const WIDTH_STORE = "sanjo.schedule.colWidths";
+const HEIGHT_STORE = "sanjo.schedule.rowHeights";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const monthKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
 function daysOfMonth(key: string) {
@@ -78,40 +80,60 @@ function daysOfMonth(key: string) {
   return Array.from({ length: last }, (_, i) => `${key}-${pad(i + 1)}`);
 }
 
-/** コメント分類文字列を「日数」と「連操」に分解 */
-function parseCategory(v: string | null | undefined) {
-  const s = (v ?? "").trim();
-  const day = DAY_OPTIONS.find((d) => s.includes(d)) ?? "";
-  return { day, renso: /連操/.test(s) };
+function readStore<T>(key: string): Record<string, T> {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, T>;
+  } catch {
+    return {};
+  }
 }
-const buildCategory = (day: string, renso: boolean) => [day, renso ? "連操" : ""].filter(Boolean).join("　");
 
 function SchedulePage() {
   const { session } = useAuth();
   const [rows, setRows] = useState<Schedule[] | null>(null);
+  const [marks, setMarks] = useState<Record<string, boolean>>({});
   const [month, setMonth] = useState(() => monthKey(new Date()));
   const [monthPicker, setMonthPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [cell, setCell] = useState<{ date: string; key: FieldKey; value: string } | null>(null);
+  const [holidayMode, setHolidayMode] = useState(false);
+  const [editing, setEditing] = useState<{ date: string; key: ScheduleField } | null>(null);
+  const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [hitIndex, setHitIndex] = useState(-1);
   const [importRows, setImportRows] = useState<ImportedRow[] | null>(null);
   const [importing, setImporting] = useState(false);
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const [heights, setHeights] = useState<Record<string, number>>({});
   const importRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
 
-  const load = async () => {
-    const { data, error } = await supabase
-      .from("schedules")
-      .select("*")
-      .is("deleted_at", null)
-      .order("entry_date", { ascending: false });
+  useEffect(() => {
+    setWidths(readStore<number>(WIDTH_STORE));
+    setHeights(readStore<number>(HEIGHT_STORE));
+  }, []);
+
+  const load = useCallback(async () => {
+    const [{ data, error }, { data: mk }] = await Promise.all([
+      supabase
+        .from("schedules")
+        .select("id,entry_date,size,comment_category,operation_comment,repair_item,new_effort,personal_plan")
+        .is("deleted_at", null)
+        .order("entry_date"),
+      supabase.from("schedule_day_marks").select("mark_date,gray"),
+    ]);
     if (error) toast.error("読み込みに失敗しました");
     setRows((data as Schedule[]) ?? []);
-  };
+    const map: Record<string, boolean> = {};
+    (mk ?? []).forEach((m) => {
+      map[m.mark_date as string] = m.gray as boolean;
+    });
+    setMarks(map);
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const byDate = useMemo(() => {
     const map: Record<string, Schedule> = {};
@@ -121,54 +143,108 @@ function SchedulePage() {
     return map;
   }, [rows]);
 
+  const colWidth = (key: string) =>
+    widths[key] ?? (key === DATE_COL_KEY ? DEFAULT_DATE_WIDTH : COLUMNS.find((c) => c.key === key)!.defaultWidth);
+  const rowHeight = (date: string) => heights[date] ?? DEFAULT_ROW_HEIGHT;
+  const tableWidth = colWidth(DATE_COL_KEY) + COLUMNS.reduce((s, c) => s + colWidth(c.key), 0);
+
+  const startColResize = (key: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidth(key);
+    const move = (ev: PointerEvent) => {
+      const next = Math.max(60, Math.round(startW + ev.clientX - startX));
+      setWidths((prev) => ({ ...prev, [key]: next }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setWidths((prev) => {
+        localStorage.setItem(WIDTH_STORE, JSON.stringify(prev));
+        return prev;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const startRowResize = (date: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const startH = rowHeight(date);
+    const move = (ev: PointerEvent) => {
+      const next = Math.max(28, Math.round(startH + ev.clientY - startY));
+      setHeights((prev) => ({ ...prev, [date]: next }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setHeights((prev) => {
+        localStorage.setItem(HEIGHT_STORE, JSON.stringify(prev));
+        return prev;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   const shiftMonth = (delta: number) => {
     const [y, m] = month.split("-").map(Number);
     setMonth(monthKey(new Date(y!, m! - 1 + delta, 1)));
   };
 
-  /** 1項目だけ保存 */
-  const saveCell = async () => {
-    if (!cell || !session) return;
-    setSaving(true);
-    const existing = byDate[cell.date];
-    const value = cell.value.trim() === "" ? null : cell.value;
-    const patch = { [cell.key]: value } as Partial<Record<FieldKey, string | null>>;
+  /** セル編集の確定（値が変わっていなければ何もしない） */
+  const commit = async () => {
+    const target = editing;
+    setEditing(null);
+    if (!target || !session) return;
+    const current = (byDate[target.date]?.[target.key] as string | null) ?? "";
+    const value = draft.trim() === "" ? null : draft;
+    if ((current || "") === (value || "")) return;
+    const existing = byDate[target.date];
+    // 画面を先に更新して、Excelのような連続入力を止めない
+    setRows((prev) =>
+      existing
+        ? (prev ?? []).map((r) => (r.id === existing.id ? { ...r, [target.key]: value } : r))
+        : prev,
+    );
+    const patch = { [target.key]: value };
     const { error } = existing
       ? await supabase.from("schedules").update(patch).eq("id", existing.id)
-      : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date: cell.date, ...patch });
-    setSaving(false);
+      : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date: target.date, ...patch });
     if (error) {
       toast.error("保存に失敗しました");
-      return;
     }
-    setCell(null);
-    void load();
+    if (!existing) void load();
   };
 
-  const remove = async (date: string) => {
-    const existing = byDate[date];
-    if (!existing) return;
+  const openCell = (date: string, key: ScheduleField) => {
+    if (holidayMode) return;
+    setDraft((byDate[date]?.[key] as string | null) ?? "");
+    setEditing({ date, key });
+  };
+
+  const toggleGray = async (date: string) => {
+    if (!session) return;
+    const next = !(marks[date] ?? isDefaultGray(date));
+    setMarks((prev) => ({ ...prev, [date]: next }));
     const { error } = await supabase
-      .from("schedules")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", existing.id);
-    if (error) {
-      toast.error("削除に失敗しました");
-      return;
-    }
-    toast.success("ごみ箱へ移動しました");
-    setCell(null);
-    void load();
+      .from("schedule_day_marks")
+      .upsert({ user_id: session.user.id, mark_date: date, gray: next }, { onConflict: "user_id,mark_date" });
+    if (error) toast.error("設定の保存に失敗しました");
   };
 
   const csv = useMemo(
     () => ({
-      headers: ["日付", "サイズ", "コメント分類", "操業コメント", "修理項目", "その他予定", "個人予定"],
+      headers: ["日付", "曜日", "サイズ", "コメント分類", "操業コメント", "修理項目", "その他予定", "個人予定"],
       body: (rows ?? [])
         .slice()
         .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
         .map((r) => [
           r.entry_date,
+          WEEK[new Date(r.entry_date + "T00:00:00").getDay()]!,
           r.size,
           r.comment_category,
           r.operation_comment,
@@ -180,24 +256,36 @@ function SchedulePage() {
     [rows],
   );
 
-  /** 検索ヒット（日付昇順・項目順） */
   const hits = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [] as { date: string; key: FieldKey }[];
+    if (!q) return [] as { date: string; key: ScheduleField }[];
     return (rows ?? [])
       .slice()
       .sort((a, b) => a.entry_date.localeCompare(b.entry_date))
       .flatMap((r) =>
-        COLUMNS.filter((c) => String(r[c.key] ?? "").toLowerCase().includes(q)).map((c) => ({
-          date: r.entry_date,
-          key: c.key,
-        })),
+        COLUMNS.filter((c) =>
+          String(r[c.key] ?? "")
+            .toLowerCase()
+            .includes(q),
+        ).map((c) => ({ date: r.entry_date, key: c.key })),
       );
   }, [rows, query]);
 
   useEffect(() => {
     setHitIndex(-1);
   }, [query]);
+
+  const scrollToDate = (date: string) => {
+    setTimeout(() => {
+      document.getElementById(`row-${date}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 80);
+  };
+
+  const gotoToday = () => {
+    const t = todayKey();
+    setMonth(t.slice(0, 7));
+    scrollToDate(t);
+  };
 
   const gotoHit = (next: number) => {
     if (hits.length === 0) {
@@ -210,11 +298,11 @@ function SchedulePage() {
     setMonth(hit.date.slice(0, 7));
     setTimeout(() => {
       document.getElementById(`cell-${hit.date}-${hit.key}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 60);
+    }, 80);
   };
 
-  const isHit = (date: string, key: FieldKey) => hits.some((h) => h.date === date && h.key === key);
-  const isCurrentHit = (date: string, key: FieldKey) =>
+  const isHit = (date: string, key: ScheduleField) => hits.some((h) => h.date === date && h.key === key);
+  const isCurrentHit = (date: string, key: ScheduleField) =>
     hitIndex >= 0 && hits[hitIndex]?.date === date && hits[hitIndex]?.key === key;
 
   const pickImport = async (file: File | undefined) => {
@@ -226,7 +314,7 @@ function SchedulePage() {
     try {
       const parsed = await parseScheduleExcel(file);
       if (parsed.length === 0) {
-        toast.error("読み込める行がありませんでした");
+        toast.error("読み込める行がありませんでした（diary22以降のシートが対象です）");
         return;
       }
       setImportRows(parsed);
@@ -238,16 +326,19 @@ function SchedulePage() {
   const runImport = async () => {
     if (!importRows || !session) return;
     setImporting(true);
+    const { data: fresh } = await supabase.from("schedules").select("id,entry_date").is("deleted_at", null);
+    const idByDate: Record<string, string> = {};
+    (fresh ?? []).forEach((r) => {
+      if (!idByDate[r.entry_date as string]) idByDate[r.entry_date as string] = r.id as string;
+    });
     let ok = 0;
     for (const r of importRows) {
       const { entry_date, ...fields } = r;
-      const payload = Object.fromEntries(
-        Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
-      ) as Partial<Record<FieldKey | "quality", string>>;
+      const payload = Object.fromEntries(Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""));
       if (Object.keys(payload).length === 0) continue;
-      const existing = byDate[entry_date];
-      const { error } = existing
-        ? await supabase.from("schedules").update(payload).eq("id", existing.id)
+      const id = idByDate[entry_date];
+      const { error } = id
+        ? await supabase.from("schedules").update(payload).eq("id", id)
         : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date, ...payload });
       if (!error) ok += 1;
     }
@@ -258,14 +349,29 @@ function SchedulePage() {
   };
 
   const days = daysOfMonth(month);
-  const editingColumn = cell ? COLUMNS.find((c) => c.key === cell.key) : undefined;
-  const cat = cell?.key === "comment_category" ? parseCategory(cell.value) : null;
+  const today = todayKey();
   const pickerYear = Number(month.slice(0, 4));
+  const dateLeft = 0;
+  const sizeLeft = colWidth(DATE_COL_KEY);
+
+  const syncScroll = (from: "top" | "body") => {
+    if (syncing.current) return;
+    syncing.current = true;
+    const top = topBarRef.current;
+    const body = scrollRef.current;
+    if (top && body) {
+      if (from === "top") body.scrollLeft = top.scrollLeft;
+      else top.scrollLeft = body.scrollLeft;
+    }
+    requestAnimationFrame(() => {
+      syncing.current = false;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <AppHeader title="スケジュール" />
-      <main className="mx-auto max-w-6xl px-3 pb-24 pt-4">
+      <main className="mx-auto max-w-7xl px-3 pb-24 pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => shiftMonth(-1)}>
@@ -281,9 +387,28 @@ function SchedulePage() {
             <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => shiftMonth(1)}>
               <ChevronRight className="size-5" />
             </Button>
+            <Button variant="outline" className="ml-1 bg-card" onClick={gotoToday}>
+              <CalendarDays className="size-4" /> 今日
+            </Button>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => importRef.current?.click()}>
+            <Button
+              variant={holidayMode ? "secondary" : "ghost"}
+              size="sm"
+              className={holidayMode ? "" : "text-muted-foreground"}
+              onClick={() => {
+                setHolidayMode((v) => !v);
+                setEditing(null);
+              }}
+            >
+              <Palette className="size-4" /> 休日設定
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => importRef.current?.click()}
+            >
               <FileUp className="size-4" /> 読込
             </Button>
             <input
@@ -317,6 +442,12 @@ function SchedulePage() {
           </div>
         </div>
 
+        {holidayMode ? (
+          <p className="mt-2 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs">
+            休日設定中：日付をタップすると、その日のグレー表示をON/OFFできます。編集に戻るには「休日設定」をもう一度押してください。
+          </p>
+        ) : null}
+
         <div className="mt-3 flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -345,130 +476,153 @@ function SchedulePage() {
             <Loader2 className="size-6 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card">
-            <table className="w-full min-w-[900px] border-collapse text-left text-[13px]">
-              <thead className="bg-secondary text-secondary-foreground">
-                <tr>
-                  <th className="sticky left-0 z-10 w-24 border-b border-border bg-secondary px-2 py-2 font-bold">
-                    日付
-                  </th>
+          <div className="mt-3">
+            {/* 上側の横スクロールバー */}
+            <div
+              ref={topBarRef}
+              className="overflow-x-auto rounded-t-lg border border-b-0 border-border bg-card"
+              onScroll={() => syncScroll("top")}
+            >
+              <div style={{ width: tableWidth, height: 1 }} />
+            </div>
+            <div
+              ref={scrollRef}
+              className="max-h-[70vh] overflow-auto rounded-b-xl border border-border bg-card"
+              onScroll={() => syncScroll("body")}
+            >
+              <table className="border-collapse text-left text-[13px]" style={{ width: tableWidth, tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: colWidth(DATE_COL_KEY) }} />
                   {COLUMNS.map((c) => (
-                    <th key={c.key} className={`border-b border-border px-2 py-2 font-bold ${c.width}`}>
-                      {c.label}
-                    </th>
+                    <col key={c.key} style={{ width: colWidth(c.key) }} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((d) => {
-                  const r = byDate[d];
-                  const wd = new Date(d + "T00:00:00").getDay();
-                  return (
-                    <tr key={d} className="border-b border-border align-top">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th
+                      className="sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground"
+                      style={{ left: dateLeft, position: "sticky" }}
+                    >
+                      <span className="relative block pr-2">
+                        日付
+                        <span
+                          role="separator"
+                          aria-label="日付の列幅を変更"
+                          onPointerDown={(e) => startColResize(DATE_COL_KEY, e)}
+                          className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                        />
+                      </span>
+                    </th>
+                    {COLUMNS.map((c, i) => (
                       <th
-                        scope="row"
-                        className={`sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card px-2 py-2 text-left font-bold ${
-                          wd === 0 ? "text-destructive" : wd === 6 ? "text-primary" : ""
+                        key={c.key}
+                        className={`sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground ${
+                          i === 0 ? "z-30" : ""
                         }`}
+                        style={i === 0 ? { left: sizeLeft, position: "sticky" } : undefined}
                       >
-                        {Number(d.slice(8))}日（{WEEK[wd]}）
+                        <span className="relative block truncate pr-2">
+                          {c.label}
+                          <span
+                            role="separator"
+                            aria-label={`${c.label}の列幅を変更`}
+                            onPointerDown={(e) => startColResize(c.key, e)}
+                            className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                          />
+                        </span>
                       </th>
-                      {COLUMNS.map((c) => (
-                        <td
-                          key={c.key}
-                          id={`cell-${d}-${c.key}`}
-                          className={`cursor-text border-r border-border px-2 py-2 align-top whitespace-pre-wrap transition-colors hover:bg-secondary/40 ${
-                            isCurrentHit(d, c.key)
-                              ? "bg-primary/20 ring-2 ring-inset ring-primary"
-                              : isHit(d, c.key)
-                                ? "bg-primary/10"
-                                : ""
-                          }`}
-                          onClick={() => setCell({ date: d, key: c.key, value: (r?.[c.key] as string) ?? "" })}
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {days.map((d) => {
+                    const r = byDate[d];
+                    const wd = new Date(d + "T00:00:00").getDay();
+                    const gray = marks[d] ?? isDefaultGray(d);
+                    const isToday = d === today;
+                    const bg = gray ? "bg-muted/40" : "bg-card";
+                    return (
+                      <tr
+                        key={d}
+                        id={`row-${d}`}
+                        className={`border-b border-border align-top ${isToday ? "outline outline-2 -outline-offset-2 outline-destructive" : ""}`}
+                      >
+                        <th
+                          scope="row"
+                          className={`sticky z-20 whitespace-nowrap border-r border-border px-2 py-1.5 text-left font-bold ${bg} ${
+                            holidayMode ? "cursor-pointer" : ""
+                          } ${wd === 0 ? "text-destructive" : wd === 6 ? "text-primary" : ""}`}
+                          style={{ left: dateLeft, height: rowHeight(d) }}
+                          onClick={() => holidayMode && void toggleGray(d)}
                         >
-                          {(r?.[c.key] as string) ?? ""}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <span className="relative block">
+                            {Number(d.slice(8))}日（{WEEK[wd]}）
+                            <span
+                              role="separator"
+                              aria-label="行の高さを変更"
+                              onPointerDown={(e) => startRowResize(d, e)}
+                              className="absolute -bottom-1.5 left-0 h-2.5 w-8 cursor-row-resize rounded bg-foreground/15"
+                            />
+                          </span>
+                        </th>
+                        {COLUMNS.map((c, i) => {
+                          const active = editing?.date === d && editing.key === c.key;
+                          const value = (r?.[c.key] as string | null) ?? "";
+                          return (
+                            <td
+                              key={c.key}
+                              id={`cell-${d}-${c.key}`}
+                              className={`cursor-text border-r border-border p-0 align-top ${bg} ${
+                                i === 0 ? "sticky z-20" : ""
+                              } ${
+                                isCurrentHit(d, c.key)
+                                  ? "bg-primary/20 ring-2 ring-inset ring-primary"
+                                  : isHit(d, c.key)
+                                    ? "bg-primary/10"
+                                    : ""
+                              }`}
+                              style={i === 0 ? { left: sizeLeft, height: rowHeight(d) } : { height: rowHeight(d) }}
+                              onClick={() => !active && openCell(d, c.key)}
+                            >
+                              {active ? (
+                                <textarea
+                                  autoFocus
+                                  value={draft}
+                                  onChange={(e) => setDraft(e.target.value)}
+                                  onBlur={() => void commit()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      void commit();
+                                    }
+                                    if (e.key === "Escape") setEditing(null);
+                                  }}
+                                  className="block w-full resize-none bg-background px-2 py-1.5 text-[13px] outline-none ring-2 ring-inset ring-primary"
+                                  style={{ height: Math.max(rowHeight(d), 40) }}
+                                />
+                              ) : (
+                                <div
+                                  className="h-full w-full overflow-hidden whitespace-pre-wrap px-2 py-1.5"
+                                  style={{ minHeight: rowHeight(d) }}
+                                >
+                                  {value}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-        <p className="mt-2 text-xs text-muted-foreground">セルをタップすると、その項目だけを直接編集できます。</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          セルをタップするとその場で入力できます（Enterで確定・Shift+Enterで改行）。見出しの端をドラッグで列幅、日付の下端をドラッグで行の高さを変更できます。
+        </p>
       </main>
-
-      {/* セル単位の編集 */}
-      <Dialog open={!!cell} onOpenChange={(o) => !o && setCell(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {cell ? `${Number(cell.date.slice(5, 7))}/${Number(cell.date.slice(8))} ${editingColumn?.label}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          {cell ? (
-            <div className="space-y-4">
-              {cell.key === "comment_category" && cat ? (
-                <div className="space-y-3">
-                  <Label>日数</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    <Button
-                      variant={cat.day === "" ? "default" : "outline"}
-                      className={cat.day === "" ? "" : "bg-card"}
-                      onClick={() => setCell({ ...cell, value: buildCategory("", cat.renso) })}
-                    >
-                      なし
-                    </Button>
-                    {DAY_OPTIONS.map((d) => (
-                      <Button
-                        key={d}
-                        variant={cat.day === d ? "default" : "outline"}
-                        className={cat.day === d ? "" : "bg-card"}
-                        onClick={() => setCell({ ...cell, value: buildCategory(d, cat.renso) })}
-                      >
-                        {d}
-                      </Button>
-                    ))}
-                  </div>
-                  <label className="flex items-center justify-between rounded-lg border border-border p-3">
-                    <span className="text-sm font-medium">連操</span>
-                    <Switch
-                      checked={cat.renso}
-                      onCheckedChange={(v) => setCell({ ...cell, value: buildCategory(cat.day, v) })}
-                    />
-                  </label>
-                  <p className="text-xs text-muted-foreground">表示：{cell.value || "（空欄）"}</p>
-                </div>
-              ) : editingColumn?.multiline ? (
-                <Textarea
-                  autoFocus
-                  rows={5}
-                  value={cell.value}
-                  onChange={(e) => setCell({ ...cell, value: e.target.value })}
-                />
-              ) : (
-                <Input
-                  autoFocus
-                  className="h-12"
-                  value={cell.value}
-                  onChange={(e) => setCell({ ...cell, value: e.target.value })}
-                />
-              )}
-              <div className="flex gap-2 pb-2">
-                <Button size="lg" className="h-12 flex-1" disabled={saving} onClick={saveCell}>
-                  <Save className="size-5" /> 保存
-                </Button>
-                {byDate[cell.date] ? (
-                  <Button size="lg" variant="destructive" className="h-12" onClick={() => remove(cell.date)}>
-                    <Trash2 className="size-5" />
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       {/* 年月ジャンプ */}
       <Dialog open={monthPicker} onOpenChange={setMonthPicker}>
@@ -513,6 +667,16 @@ function SchedulePage() {
                 </Button>
               ))}
             </div>
+            <Button
+              variant="secondary"
+              className="h-12 w-full"
+              onClick={() => {
+                setMonthPicker(false);
+                gotoToday();
+              }}
+            >
+              今日へ移動
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -523,7 +687,8 @@ function SchedulePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excelの内容で上書きします</AlertDialogTitle>
             <AlertDialogDescription>
-              {importRows?.length ?? 0}日分の入力を現在のスケジュールへ反映します。Excelが空欄の項目は変更しません。よろしいですか？
+              {importRows?.length ?? 0}
+              日分の入力を反映します（diary22以降のシート・3行目以降が対象）。Excelが空欄の項目は変更しません。よろしいですか？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
