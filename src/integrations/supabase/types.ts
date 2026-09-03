@@ -263,6 +263,27 @@ export type Database = {
         }
         Relationships: []
       }
+      schedule_day_marks: {
+        Row: {
+          gray: boolean
+          mark_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          gray: boolean
+          mark_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          gray?: boolean
+          mark_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       schedules: {
         Row: {
           comment_category: string | null
