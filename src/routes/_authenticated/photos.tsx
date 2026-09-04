@@ -137,8 +137,31 @@ function PhotosPage() {
     const again = pending.fromCamera;
     setPending(null);
     void load();
-    // 現場で連続撮影できるよう、撮影の場合はカメラを再度開く
-    if (again) setTimeout(() => cameraRef.current?.click(), 250);
+    // 現場で連続撮影できるよう、撮影の場合は撮影画面へ戻る
+    if (again) setCameraOpen(true);
+  };
+
+  /** 縦横が逆に写った場合の回転（アスペクト比は保ったまま90度回す） */
+  const rotatePending = async () => {
+    if (!pending) return;
+    const src = pending.preview;
+    const img = new Image();
+    img.src = src;
+    await img.decode().catch(() => undefined);
+    if (!img.naturalWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalHeight;
+    canvas.height = img.naturalWidth;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return;
+    const file = new File([blob], pending.file.name, { type: "image/jpeg" });
+    URL.revokeObjectURL(src);
+    setPending({ ...pending, file, preview: URL.createObjectURL(file) });
   };
 
   const toggleFolder = async (photo: Photo, folderId: string, on: boolean) => {
