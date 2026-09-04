@@ -210,7 +210,7 @@ function SchedulePage() {
         ? (prev ?? []).map((r) => (r.id === existing.id ? { ...r, [target.key]: value } : r))
         : prev,
     );
-    const patch = { [target.key]: value };
+    const patch: Partial<Record<ScheduleField, string | null>> = { [target.key]: value };
     const { error } = existing
       ? await supabase.from("schedules").update(patch).eq("id", existing.id)
       : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date: target.date, ...patch });
