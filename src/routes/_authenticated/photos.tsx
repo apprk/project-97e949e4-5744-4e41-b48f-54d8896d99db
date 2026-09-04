@@ -294,24 +294,13 @@ function PhotosPage() {
       <AppHeader title="写真" />
       <main className="mx-auto max-w-5xl px-4 pb-32 pt-4">
         <div className="grid grid-cols-2 gap-2">
-          <Button size="lg" className="h-14" onClick={() => cameraRef.current?.click()}>
+          <Button size="lg" className="h-14" onClick={() => setCameraOpen(true)}>
             <Camera className="size-5" /> 撮影
           </Button>
           <Button size="lg" variant="outline" className="h-14 bg-card" onClick={() => fileRef.current?.click()}>
             <Upload className="size-5" /> 端末から追加
           </Button>
         </div>
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            pick(e.target.files?.[0], true);
-            e.target.value = "";
-          }}
-        />
         <input
           ref={fileRef}
           type="file"
