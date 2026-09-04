@@ -67,7 +67,7 @@ function PhotosPage() {
   const [openComment, setOpenComment] = useState("");
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkFolderOpen, setBulkFolderOpen] = useState(false);
-  const cameraRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
