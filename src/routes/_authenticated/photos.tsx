@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Check, FolderPlus, FolderInput, Loader2, Pencil, Trash2, Upload, X } from "lucide-react";
+import { Camera, Check, FolderPlus, FolderInput, Loader2, Pencil, RotateCw, Trash2, Upload, X } from "lucide-react";
+import { CameraCapture } from "@/components/CameraCapture";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
