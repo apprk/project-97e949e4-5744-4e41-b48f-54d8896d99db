@@ -616,6 +616,13 @@ function PhotosPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* アプリ内カメラ（アスペクト比を維持して撮影・保存後も撮影画面に戻る） */}
+      <CameraCapture
+        open={cameraOpen && !pending}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => pick(file, true)}
+      />
     </div>
   );
 }
