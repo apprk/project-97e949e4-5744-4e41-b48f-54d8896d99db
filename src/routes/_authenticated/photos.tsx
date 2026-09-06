@@ -394,7 +394,7 @@ function PhotosPage() {
                       src={urls[p.id]}
                       alt={p.comment || "記録写真"}
                       loading="lazy"
-                      className="aspect-square w-full object-cover"
+                      className="aspect-square w-full bg-muted object-contain"
                     />
                   ) : (
                     <div className="aspect-square w-full bg-muted" />
@@ -457,6 +457,9 @@ function PhotosPage() {
           {pending ? (
             <div className="space-y-4">
               <img src={pending.preview} alt="プレビュー" className="max-h-64 w-full rounded-lg object-contain" />
+              <Button variant="outline" className="h-11 w-full bg-card" onClick={() => void rotatePending()}>
+                <RotateCw className="size-4" /> 90度回転
+              </Button>
               <div className="space-y-1.5">
                 <Label htmlFor="photo-comment">コメント</Label>
                 <Textarea id="photo-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
@@ -487,7 +490,7 @@ function PhotosPage() {
                 {uploading ? <Loader2 className="size-5 animate-spin" /> : null} 保存
               </Button>
               {pending.fromCamera ? (
-                <p className="text-xs text-muted-foreground">保存後は続けて撮影できるよう、カメラを再度開きます。</p>
+                <p className="text-xs text-muted-foreground">保存後は撮影画面に戻り、続けて撮影できます。</p>
               ) : null}
             </div>
           ) : null}
@@ -613,6 +616,13 @@ function PhotosPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* アプリ内カメラ（アスペクト比を維持して撮影・保存後も撮影画面に戻る） */}
+      <CameraCapture
+        open={cameraOpen && !pending}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => pick(file, true)}
+      />
     </div>
   );
 }

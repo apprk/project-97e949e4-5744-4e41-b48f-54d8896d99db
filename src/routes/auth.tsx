@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Delete, Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -160,13 +160,6 @@ function AuthPage() {
             ) : null}
           </>
         )}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          初期アカウントは「管理者 / 0000」です。
-          <Link to="/settings" className="ml-1 underline">
-            設定
-          </Link>
-          から変更できます。
-        </p>
       </main>
     </div>
   );
