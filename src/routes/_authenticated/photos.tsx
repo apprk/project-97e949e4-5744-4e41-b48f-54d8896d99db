@@ -490,7 +490,7 @@ function PhotosPage() {
                 {uploading ? <Loader2 className="size-5 animate-spin" /> : null} 保存
               </Button>
               {pending.fromCamera ? (
-                <p className="text-xs text-muted-foreground">保存後は続けて撮影できるよう、カメラを再度開きます。</p>
+                <p className="text-xs text-muted-foreground">保存後は撮影画面に戻り、続けて撮影できます。</p>
               ) : null}
             </div>
           ) : null}
