@@ -394,7 +394,7 @@ function PhotosPage() {
                       src={urls[p.id]}
                       alt={p.comment || "記録写真"}
                       loading="lazy"
-                      className="aspect-square w-full object-cover"
+                      className="aspect-square w-full bg-muted object-contain"
                     />
                   ) : (
                     <div className="aspect-square w-full bg-muted" />
