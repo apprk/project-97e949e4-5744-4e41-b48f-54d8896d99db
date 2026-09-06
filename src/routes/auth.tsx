@@ -160,13 +160,6 @@ function AuthPage() {
             ) : null}
           </>
         )}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          初期アカウントは「管理者 / 0000」です。
-          <Link to="/settings" className="ml-1 underline">
-            設定
-          </Link>
-          から変更できます。
-        </p>
       </main>
     </div>
   );
