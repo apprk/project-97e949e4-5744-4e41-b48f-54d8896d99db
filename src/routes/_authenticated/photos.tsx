@@ -457,6 +457,9 @@ function PhotosPage() {
           {pending ? (
             <div className="space-y-4">
               <img src={pending.preview} alt="プレビュー" className="max-h-64 w-full rounded-lg object-contain" />
+              <Button variant="outline" className="h-11 w-full bg-card" onClick={() => void rotatePending()}>
+                <RotateCw className="size-4" /> 90度回転
+              </Button>
               <div className="space-y-1.5">
                 <Label htmlFor="photo-comment">コメント</Label>
                 <Textarea id="photo-comment" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
