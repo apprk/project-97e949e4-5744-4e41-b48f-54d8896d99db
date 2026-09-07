@@ -109,6 +109,8 @@ function SchedulePage() {
   const [hitIndex, setHitIndex] = useState(-1);
   const [importRows, setImportRows] = useState<ImportedRow[] | null>(null);
   const [importing, setImporting] = useState(false);
+  const [range, setRange] = useState({ start: "", end: "" });
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [heights, setHeights] = useState<Record<string, number>>({});
   const importRef = useRef<HTMLInputElement>(null);
