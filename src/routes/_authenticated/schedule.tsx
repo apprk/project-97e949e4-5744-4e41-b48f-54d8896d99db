@@ -325,32 +325,60 @@ function SchedulePage() {
         toast.error("読み込める行がありませんでした（diary22以降のシートが対象です）");
         return;
       }
+      const dates = parsed.map((r) => r.entry_date).sort();
+      setRange({ start: dates[0]!, end: dates[dates.length - 1]! });
       setImportRows(parsed);
     } catch {
       toast.error("Excelの読み込みに失敗しました");
     }
   };
 
+  /** 期間で絞ったインポート対象。範囲外の日付は一切変更しない */
+  const targetRows = useMemo(
+    () => (importRows ?? []).filter((r) => r.entry_date >= range.start && r.entry_date <= range.end),
+    [importRows, range],
+  );
+
   const runImport = async () => {
     if (!importRows || !session) return;
+    if (range.start > range.end) {
+      toast.error("開始日が終了日より後になっています");
+      return;
+    }
     setImporting(true);
-    const { data: fresh } = await supabase.from("schedules").select("id,entry_date").is("deleted_at", null);
+    setProgress({ done: 0, total: targetRows.length });
+    const { data: fresh } = await supabase
+      .from("schedules")
+      .select("id,entry_date")
+      .is("deleted_at", null)
+      .gte("entry_date", range.start)
+      .lte("entry_date", range.end);
     const idByDate: Record<string, string> = {};
     (fresh ?? []).forEach((r) => {
       if (!idByDate[r.entry_date as string]) idByDate[r.entry_date as string] = r.id as string;
     });
     let ok = 0;
-    for (const r of importRows) {
+    const inserts: Record<string, unknown>[] = [];
+    for (const r of targetRows) {
       const { entry_date, ...fields } = r;
       const payload = Object.fromEntries(
         Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
       ) as Partial<Record<ScheduleField, string>>;
       if (Object.keys(payload).length === 0) continue;
       const id = idByDate[entry_date];
-      const { error } = id
-        ? await supabase.from("schedules").update(payload).eq("id", id)
-        : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date, ...payload });
-      if (!error) ok += 1;
+      if (id) {
+        const { error } = await supabase.from("schedules").update(payload).eq("id", id);
+        if (!error) ok += 1;
+      } else {
+        inserts.push({ user_id: session.user.id, entry_date, ...payload });
+      }
+      setProgress((p) => ({ ...p, done: p.done + 1 }));
+    }
+    // 新規分はまとめて登録し、件数が多い年でも取りこぼさない
+    for (let i = 0; i < inserts.length; i += 100) {
+      const chunk = inserts.slice(i, i + 100);
+      const { error } = await supabase.from("schedules").insert(chunk as never);
+      if (!error) ok += chunk.length;
     }
     setImporting(false);
     setImportRows(null);
