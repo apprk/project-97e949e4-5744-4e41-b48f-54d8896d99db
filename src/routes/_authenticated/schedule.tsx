@@ -74,6 +74,14 @@ const todayKey = () => {
 };
 const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
+/** 今日の行を途切れない赤枠で囲む（セルごとの内側シャドウで太さを統一） */
+function todayShadow(first: boolean, last: boolean) {
+  const parts = ["inset 0 2px 0 0 var(--destructive)", "inset 0 -2px 0 0 var(--destructive)"];
+  if (first) parts.push("inset 2px 0 0 0 var(--destructive)");
+  if (last) parts.push("inset -2px 0 0 0 var(--destructive)");
+  return parts.join(", ");
+}
+
 function daysOfMonth(key: string) {
   const [y, m] = key.split("-").map(Number);
   const last = new Date(y!, m!, 0).getDate();
