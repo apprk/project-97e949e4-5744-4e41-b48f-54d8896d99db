@@ -164,6 +164,36 @@ function PhotosPage() {
     setPending({ ...pending, file, preview: URL.createObjectURL(file) });
   };
 
+  /** 保存済みの写真を90度ずつ回転して保存し直す（コメント・確認状態・フォルダは変更しない） */
+  const rotateSaved = async (photo: Photo) => {
+    const url = urls[photo.id];
+    if (!url || rotating) return;
+    setRotating(true);
+    try {
+      const bmp = await createImageBitmap(await (await fetch(url)).blob());
+      const canvas = document.createElement("canvas");
+      canvas.width = bmp.height;
+      canvas.height = bmp.width;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      if (!blob) throw new Error("blob");
+      const { error } = await supabase.storage
+        .from("photos")
+        .upload(photo.storage_path, blob, { upsert: true, contentType: "image/jpeg" });
+      if (error) throw error;
+      const { data } = await supabase.storage.from("photos").createSignedUrl(photo.storage_path, 3600);
+      if (data?.signedUrl) setUrls((prev) => ({ ...prev, [photo.id]: `${data.signedUrl}&r=${Date.now()}` }));
+      toast.success("90度回転しました");
+    } catch {
+      toast.error("回転に失敗しました");
+    }
+    setRotating(false);
+  };
+
   const toggleFolder = async (photo: Photo, folderId: string, on: boolean) => {
     if (!session) return;
     if (on) {
