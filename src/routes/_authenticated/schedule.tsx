@@ -74,6 +74,14 @@ const todayKey = () => {
 };
 const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
+/** 今日の行を途切れない赤枠で囲む（セルごとの内側シャドウで太さを統一） */
+function todayShadow(first: boolean, last: boolean) {
+  const parts = ["inset 0 2px 0 0 var(--destructive)", "inset 0 -2px 0 0 var(--destructive)"];
+  if (first) parts.push("inset 2px 0 0 0 var(--destructive)");
+  if (last) parts.push("inset -2px 0 0 0 var(--destructive)");
+  return parts.join(", ");
+}
+
 function daysOfMonth(key: string) {
   const [y, m] = key.split("-").map(Number);
   const last = new Date(y!, m!, 0).getDate();
@@ -101,6 +109,8 @@ function SchedulePage() {
   const [hitIndex, setHitIndex] = useState(-1);
   const [importRows, setImportRows] = useState<ImportedRow[] | null>(null);
   const [importing, setImporting] = useState(false);
+  const [range, setRange] = useState({ start: "", end: "" });
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [heights, setHeights] = useState<Record<string, number>>({});
   const importRef = useRef<HTMLInputElement>(null);
@@ -317,32 +327,60 @@ function SchedulePage() {
         toast.error("読み込める行がありませんでした（diary22以降のシートが対象です）");
         return;
       }
+      const dates = parsed.map((r) => r.entry_date).sort();
+      setRange({ start: dates[0]!, end: dates[dates.length - 1]! });
       setImportRows(parsed);
     } catch {
       toast.error("Excelの読み込みに失敗しました");
     }
   };
 
+  /** 期間で絞ったインポート対象。範囲外の日付は一切変更しない */
+  const targetRows = useMemo(
+    () => (importRows ?? []).filter((r) => r.entry_date >= range.start && r.entry_date <= range.end),
+    [importRows, range],
+  );
+
   const runImport = async () => {
     if (!importRows || !session) return;
+    if (range.start > range.end) {
+      toast.error("開始日が終了日より後になっています");
+      return;
+    }
     setImporting(true);
-    const { data: fresh } = await supabase.from("schedules").select("id,entry_date").is("deleted_at", null);
+    setProgress({ done: 0, total: targetRows.length });
+    const { data: fresh } = await supabase
+      .from("schedules")
+      .select("id,entry_date")
+      .is("deleted_at", null)
+      .gte("entry_date", range.start)
+      .lte("entry_date", range.end);
     const idByDate: Record<string, string> = {};
     (fresh ?? []).forEach((r) => {
       if (!idByDate[r.entry_date as string]) idByDate[r.entry_date as string] = r.id as string;
     });
     let ok = 0;
-    for (const r of importRows) {
+    const inserts: Record<string, unknown>[] = [];
+    for (const r of targetRows) {
       const { entry_date, ...fields } = r;
       const payload = Object.fromEntries(
         Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
       ) as Partial<Record<ScheduleField, string>>;
       if (Object.keys(payload).length === 0) continue;
       const id = idByDate[entry_date];
-      const { error } = id
-        ? await supabase.from("schedules").update(payload).eq("id", id)
-        : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date, ...payload });
-      if (!error) ok += 1;
+      if (id) {
+        const { error } = await supabase.from("schedules").update(payload).eq("id", id);
+        if (!error) ok += 1;
+      } else {
+        inserts.push({ user_id: session.user.id, entry_date, ...payload });
+      }
+      setProgress((p) => ({ ...p, done: p.done + 1 }));
+    }
+    // 新規分はまとめて登録し、件数が多い年でも取りこぼさない
+    for (let i = 0; i < inserts.length; i += 100) {
+      const chunk = inserts.slice(i, i + 100);
+      const { error } = await supabase.from("schedules").insert(chunk as never);
+      if (!error) ok += chunk.length;
     }
     setImporting(false);
     setImportRows(null);
@@ -492,7 +530,10 @@ function SchedulePage() {
               className="max-h-[70vh] overflow-auto rounded-b-xl border border-border bg-card"
               onScroll={() => syncScroll("body")}
             >
-              <table className="border-collapse text-left text-[13px]" style={{ width: tableWidth, tableLayout: "fixed" }}>
+              <table
+                className="border-separate border-spacing-0 text-left text-[13px]"
+                style={{ width: tableWidth, tableLayout: "fixed" }}
+              >
                 <colgroup>
                   <col style={{ width: colWidth(DATE_COL_KEY) }} />
                   {COLUMNS.map((c) => (
@@ -502,8 +543,8 @@ function SchedulePage() {
                 <thead>
                   <tr>
                     <th
-                      className="sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground"
-                      style={{ left: dateLeft, position: "sticky" }}
+                      className="sticky top-0 z-40 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground"
+                      style={{ left: dateLeft, position: "sticky", top: 0 }}
                     >
                       <span className="relative block pr-2">
                         日付
@@ -511,17 +552,17 @@ function SchedulePage() {
                           role="separator"
                           aria-label="日付の列幅を変更"
                           onPointerDown={(e) => startColResize(DATE_COL_KEY, e)}
-                          className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                          className="absolute -right-2 top-1/2 h-full w-3 -translate-y-1/2 cursor-col-resize"
                         />
                       </span>
                     </th>
                     {COLUMNS.map((c, i) => (
                       <th
                         key={c.key}
-                        className={`sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground ${
-                          i === 0 ? "z-30" : ""
+                        className={`sticky top-0 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground ${
+                          i === 0 ? "z-40" : "z-30"
                         }`}
-                        style={i === 0 ? { left: sizeLeft, position: "sticky" } : undefined}
+                        style={i === 0 ? { left: sizeLeft, position: "sticky", top: 0 } : undefined}
                       >
                         <span className="relative block truncate pr-2">
                           {c.label}
@@ -529,7 +570,7 @@ function SchedulePage() {
                             role="separator"
                             aria-label={`${c.label}の列幅を変更`}
                             onPointerDown={(e) => startColResize(c.key, e)}
-                            className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                            className="absolute -right-2 top-1/2 h-full w-3 -translate-y-1/2 cursor-col-resize"
                           />
                         </span>
                       </th>
@@ -542,19 +583,21 @@ function SchedulePage() {
                     const wd = new Date(d + "T00:00:00").getDay();
                     const gray = marks[d] ?? isDefaultGray(d);
                     const isToday = d === today;
-                    const bg = gray ? "bg-muted/40" : "bg-card";
+                    const cellBg = gray ? "var(--schedule-gray)" : "var(--card)";
+                    const h = rowHeight(d);
                     return (
-                      <tr
-                        key={d}
-                        id={`row-${d}`}
-                        className={`border-b border-border align-top ${isToday ? "outline outline-2 -outline-offset-2 outline-destructive" : ""}`}
-                      >
+                      <tr key={d} id={`row-${d}`} className="align-top">
                         <th
                           scope="row"
-                          className={`sticky z-20 whitespace-nowrap border-r border-border px-2 py-1.5 text-left font-bold ${bg} ${
+                          className={`sticky z-20 whitespace-nowrap border-b border-r border-border px-2 py-1.5 text-left font-bold ${
                             holidayMode ? "cursor-pointer" : ""
                           } ${wd === 0 ? "text-destructive" : wd === 6 ? "text-primary" : ""}`}
-                          style={{ left: dateLeft, height: rowHeight(d) }}
+                          style={{
+                            left: dateLeft,
+                            height: h,
+                            backgroundColor: cellBg,
+                            ...(isToday ? { boxShadow: todayShadow(true, false) } : {}),
+                          }}
                           onClick={() => holidayMode && void toggleGray(d)}
                         >
                           <span className="relative block">
@@ -563,27 +606,33 @@ function SchedulePage() {
                               role="separator"
                               aria-label="行の高さを変更"
                               onPointerDown={(e) => startRowResize(d, e)}
-                              className="absolute -bottom-1.5 left-0 h-2.5 w-8 cursor-row-resize rounded bg-foreground/15"
+                              className="absolute -bottom-1.5 left-0 h-2.5 w-full cursor-row-resize"
                             />
                           </span>
                         </th>
                         {COLUMNS.map((c, i) => {
                           const active = editing?.date === d && editing.key === c.key;
                           const value = (r?.[c.key] as string | null) ?? "";
+                          const last = i === COLUMNS.length - 1;
                           return (
                             <td
                               key={c.key}
                               id={`cell-${d}-${c.key}`}
-                              className={`cursor-text border-r border-border p-0 align-top ${bg} ${
+                              className={`cursor-text border-b border-r border-border p-0 align-top ${
                                 i === 0 ? "sticky z-20" : ""
                               } ${
                                 isCurrentHit(d, c.key)
-                                  ? "bg-primary/20 ring-2 ring-inset ring-primary"
+                                  ? "ring-2 ring-inset ring-primary"
                                   : isHit(d, c.key)
                                     ? "bg-primary/10"
                                     : ""
                               }`}
-                              style={i === 0 ? { left: sizeLeft, height: rowHeight(d) } : { height: rowHeight(d) }}
+                              style={{
+                                height: h,
+                                backgroundColor: cellBg,
+                                ...(i === 0 ? { left: sizeLeft } : {}),
+                                ...(isToday ? { boxShadow: todayShadow(false, last) } : {}),
+                              }}
                               onClick={() => !active && openCell(d, c.key)}
                             >
                               {active ? (
@@ -599,13 +648,13 @@ function SchedulePage() {
                                     }
                                     if (e.key === "Escape") setEditing(null);
                                   }}
-                                  className="block w-full resize-none bg-background px-2 py-1.5 text-[13px] outline-none ring-2 ring-inset ring-primary"
-                                  style={{ height: Math.max(rowHeight(d), 40) }}
+                                  className="block w-full resize-none bg-background px-2 py-1 text-[13px] leading-snug outline-none ring-2 ring-inset ring-primary"
+                                  style={{ height: h, boxSizing: "border-box" }}
                                 />
                               ) : (
                                 <div
-                                  className="h-full w-full overflow-hidden whitespace-pre-wrap px-2 py-1.5"
-                                  style={{ minHeight: rowHeight(d) }}
+                                  className="w-full overflow-hidden whitespace-pre-wrap px-2 py-1 leading-snug"
+                                  style={{ height: h }}
                                 >
                                   {value}
                                 </div>
@@ -689,10 +738,39 @@ function SchedulePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excelの内容で上書きします</AlertDialogTitle>
             <AlertDialogDescription>
-              {importRows?.length ?? 0}
-              日分の入力を反映します（diary22以降のシート・3行目以降が対象）。Excelが空欄の項目は変更しません。よろしいですか？
+              読み込んだ入力は全部で{importRows?.length ?? 0}日分です。下の期間を指定すると、その範囲だけを反映します（範囲外の日付は変更しません）。Excelが空欄の項目も変更しません。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="imp-start">
+                開始日
+              </label>
+              <Input
+                id="imp-start"
+                type="date"
+                className="h-11"
+                value={range.start}
+                onChange={(e) => setRange((p) => ({ ...p, start: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="imp-end">
+                終了日
+              </label>
+              <Input
+                id="imp-end"
+                type="date"
+                className="h-11"
+                value={range.end}
+                onChange={(e) => setRange((p) => ({ ...p, end: e.target.value }))}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            この期間の対象：{targetRows.length}日分
+            {importing ? `／反映中 ${progress.done}/${progress.total}` : ""}
+          </p>
           <AlertDialogFooter>
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
             <AlertDialogAction

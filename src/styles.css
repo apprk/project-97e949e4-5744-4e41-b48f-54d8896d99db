@@ -97,6 +97,8 @@
   --sidebar-ring: oklch(0.42 0.085 245);
   --gradient-header: linear-gradient(135deg, oklch(0.36 0.07 248), oklch(0.5 0.09 243));
   --shadow-tile: 0 6px 18px -8px oklch(0.42 0.085 245 / 35%);
+  /* スケジュールの土日祝・手動グレー行（黒文字が読める濃さ） */
+  --schedule-gray: oklch(0.865 0.012 247);
 }
 
 
@@ -133,6 +135,7 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --schedule-gray: oklch(0.3 0.04 260);
 }
 
 @layer base {
