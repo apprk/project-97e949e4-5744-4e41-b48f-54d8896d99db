@@ -738,10 +738,39 @@ function SchedulePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excelの内容で上書きします</AlertDialogTitle>
             <AlertDialogDescription>
-              {importRows?.length ?? 0}
-              日分の入力を反映します（diary22以降のシート・3行目以降が対象）。Excelが空欄の項目は変更しません。よろしいですか？
+              読み込んだ入力は全部で{importRows?.length ?? 0}日分です。下の期間を指定すると、その範囲だけを反映します（範囲外の日付は変更しません）。Excelが空欄の項目も変更しません。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="imp-start">
+                開始日
+              </label>
+              <Input
+                id="imp-start"
+                type="date"
+                className="h-11"
+                value={range.start}
+                onChange={(e) => setRange((p) => ({ ...p, start: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium" htmlFor="imp-end">
+                終了日
+              </label>
+              <Input
+                id="imp-end"
+                type="date"
+                className="h-11"
+                value={range.end}
+                onChange={(e) => setRange((p) => ({ ...p, end: e.target.value }))}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            この期間の対象：{targetRows.length}日分
+            {importing ? `／反映中 ${progress.done}/${progress.total}` : ""}
+          </p>
           <AlertDialogFooter>
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
             <AlertDialogAction
