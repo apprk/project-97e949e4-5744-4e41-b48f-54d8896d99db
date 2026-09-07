@@ -492,7 +492,10 @@ function SchedulePage() {
               className="max-h-[70vh] overflow-auto rounded-b-xl border border-border bg-card"
               onScroll={() => syncScroll("body")}
             >
-              <table className="border-collapse text-left text-[13px]" style={{ width: tableWidth, tableLayout: "fixed" }}>
+              <table
+                className="border-separate border-spacing-0 text-left text-[13px]"
+                style={{ width: tableWidth, tableLayout: "fixed" }}
+              >
                 <colgroup>
                   <col style={{ width: colWidth(DATE_COL_KEY) }} />
                   {COLUMNS.map((c) => (
@@ -502,8 +505,8 @@ function SchedulePage() {
                 <thead>
                   <tr>
                     <th
-                      className="sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground"
-                      style={{ left: dateLeft, position: "sticky" }}
+                      className="sticky top-0 z-40 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground"
+                      style={{ left: dateLeft, position: "sticky", top: 0 }}
                     >
                       <span className="relative block pr-2">
                         日付
@@ -511,17 +514,17 @@ function SchedulePage() {
                           role="separator"
                           aria-label="日付の列幅を変更"
                           onPointerDown={(e) => startColResize(DATE_COL_KEY, e)}
-                          className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                          className="absolute -right-2 top-1/2 h-full w-3 -translate-y-1/2 cursor-col-resize"
                         />
                       </span>
                     </th>
                     {COLUMNS.map((c, i) => (
                       <th
                         key={c.key}
-                        className={`sticky top-0 z-30 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground ${
-                          i === 0 ? "z-30" : ""
+                        className={`sticky top-0 border-b border-r border-border bg-secondary px-2 py-2 font-bold text-secondary-foreground ${
+                          i === 0 ? "z-40" : "z-30"
                         }`}
-                        style={i === 0 ? { left: sizeLeft, position: "sticky" } : undefined}
+                        style={i === 0 ? { left: sizeLeft, position: "sticky", top: 0 } : undefined}
                       >
                         <span className="relative block truncate pr-2">
                           {c.label}
@@ -529,7 +532,7 @@ function SchedulePage() {
                             role="separator"
                             aria-label={`${c.label}の列幅を変更`}
                             onPointerDown={(e) => startColResize(c.key, e)}
-                            className="absolute -right-2 top-1/2 h-6 w-3 -translate-y-1/2 cursor-col-resize rounded bg-foreground/20"
+                            className="absolute -right-2 top-1/2 h-full w-3 -translate-y-1/2 cursor-col-resize"
                           />
                         </span>
                       </th>
@@ -542,19 +545,21 @@ function SchedulePage() {
                     const wd = new Date(d + "T00:00:00").getDay();
                     const gray = marks[d] ?? isDefaultGray(d);
                     const isToday = d === today;
-                    const bg = gray ? "bg-muted/40" : "bg-card";
+                    const cellBg = gray ? "var(--schedule-gray)" : "var(--card)";
+                    const h = rowHeight(d);
                     return (
-                      <tr
-                        key={d}
-                        id={`row-${d}`}
-                        className={`border-b border-border align-top ${isToday ? "outline outline-2 -outline-offset-2 outline-destructive" : ""}`}
-                      >
+                      <tr key={d} id={`row-${d}`} className="align-top">
                         <th
                           scope="row"
-                          className={`sticky z-20 whitespace-nowrap border-r border-border px-2 py-1.5 text-left font-bold ${bg} ${
+                          className={`sticky z-20 whitespace-nowrap border-b border-r border-border px-2 py-1.5 text-left font-bold ${
                             holidayMode ? "cursor-pointer" : ""
                           } ${wd === 0 ? "text-destructive" : wd === 6 ? "text-primary" : ""}`}
-                          style={{ left: dateLeft, height: rowHeight(d) }}
+                          style={{
+                            left: dateLeft,
+                            height: h,
+                            backgroundColor: cellBg,
+                            ...(isToday ? { boxShadow: todayShadow(true, false) } : {}),
+                          }}
                           onClick={() => holidayMode && void toggleGray(d)}
                         >
                           <span className="relative block">
@@ -563,27 +568,33 @@ function SchedulePage() {
                               role="separator"
                               aria-label="行の高さを変更"
                               onPointerDown={(e) => startRowResize(d, e)}
-                              className="absolute -bottom-1.5 left-0 h-2.5 w-8 cursor-row-resize rounded bg-foreground/15"
+                              className="absolute -bottom-1.5 left-0 h-2.5 w-full cursor-row-resize"
                             />
                           </span>
                         </th>
                         {COLUMNS.map((c, i) => {
                           const active = editing?.date === d && editing.key === c.key;
                           const value = (r?.[c.key] as string | null) ?? "";
+                          const last = i === COLUMNS.length - 1;
                           return (
                             <td
                               key={c.key}
                               id={`cell-${d}-${c.key}`}
-                              className={`cursor-text border-r border-border p-0 align-top ${bg} ${
+                              className={`cursor-text border-b border-r border-border p-0 align-top ${
                                 i === 0 ? "sticky z-20" : ""
                               } ${
                                 isCurrentHit(d, c.key)
-                                  ? "bg-primary/20 ring-2 ring-inset ring-primary"
+                                  ? "ring-2 ring-inset ring-primary"
                                   : isHit(d, c.key)
                                     ? "bg-primary/10"
                                     : ""
                               }`}
-                              style={i === 0 ? { left: sizeLeft, height: rowHeight(d) } : { height: rowHeight(d) }}
+                              style={{
+                                height: h,
+                                backgroundColor: cellBg,
+                                ...(i === 0 ? { left: sizeLeft } : {}),
+                                ...(isToday ? { boxShadow: todayShadow(false, last) } : {}),
+                              }}
                               onClick={() => !active && openCell(d, c.key)}
                             >
                               {active ? (
@@ -599,13 +610,13 @@ function SchedulePage() {
                                     }
                                     if (e.key === "Escape") setEditing(null);
                                   }}
-                                  className="block w-full resize-none bg-background px-2 py-1.5 text-[13px] outline-none ring-2 ring-inset ring-primary"
-                                  style={{ height: Math.max(rowHeight(d), 40) }}
+                                  className="block w-full resize-none bg-background px-2 py-1 text-[13px] leading-snug outline-none ring-2 ring-inset ring-primary"
+                                  style={{ height: h, boxSizing: "border-box" }}
                                 />
                               ) : (
                                 <div
-                                  className="h-full w-full overflow-hidden whitespace-pre-wrap px-2 py-1.5"
-                                  style={{ minHeight: rowHeight(d) }}
+                                  className="w-full overflow-hidden whitespace-pre-wrap px-2 py-1 leading-snug"
+                                  style={{ height: h }}
                                 >
                                   {value}
                                 </div>
