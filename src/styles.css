@@ -99,6 +99,7 @@
   --shadow-tile: 0 6px 18px -8px oklch(0.42 0.085 245 / 35%);
   /* スケジュールの土日祝・手動グレー行（黒文字が読める濃さ） */
   --schedule-gray: oklch(0.865 0.012 247);
+  --schedule-gray-border: oklch(0.72 0.014 247);
 }
 
 
@@ -136,6 +137,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
   --schedule-gray: oklch(0.3 0.04 260);
+  --schedule-gray-border: oklch(0.45 0.03 260);
 }
 
 @layer base {

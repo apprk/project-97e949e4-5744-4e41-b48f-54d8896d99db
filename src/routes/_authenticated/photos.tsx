@@ -68,6 +68,7 @@ function PhotosPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkFolderOpen, setBulkFolderOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [rotating, setRotating] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -167,7 +168,7 @@ function PhotosPage() {
   /** 保存済みの写真を90度ずつ回転して保存し直す（コメント・確認状態・フォルダは変更しない） */
   const rotateSaved = async (photo: Photo) => {
     const url = urls[photo.id];
-    if (!url || rotating) return;
+    if (!url || rotating || !session) return;
     setRotating(true);
     try {
       const bmp = await createImageBitmap(await (await fetch(url)).blob());
@@ -181,18 +182,26 @@ function PhotosPage() {
       ctx.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
       if (!blob) throw new Error("blob");
-      const { error } = await supabase.storage
+      const oldPath = photo.storage_path;
+      const newPath = `${session.user.id}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage
         .from("photos")
-        .upload(photo.storage_path, blob, { upsert: true, contentType: "image/jpeg" });
-      if (error) throw error;
-      const { data } = await supabase.storage.from("photos").createSignedUrl(photo.storage_path, 3600);
-      if (data?.signedUrl) setUrls((prev) => ({ ...prev, [photo.id]: `${data.signedUrl}&r=${Date.now()}` }));
+        .upload(newPath, blob, { contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+      const { error: dbErr } = await supabase.from("photos").update({ storage_path: newPath }).eq("id", photo.id);
+      if (dbErr) throw dbErr;
+      await supabase.storage.from("photos").remove([oldPath]);
+      setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, storage_path: newPath } : p)));
+      setOpened((prev) => (prev && prev.id === photo.id ? { ...prev, storage_path: newPath } : prev));
+      const { data } = await supabase.storage.from("photos").createSignedUrl(newPath, 3600);
+      if (data?.signedUrl) setUrls((prev) => ({ ...prev, [photo.id]: data.signedUrl }));
       toast.success("90度回転しました");
     } catch {
       toast.error("回転に失敗しました");
     }
     setRotating(false);
   };
+
 
   const toggleFolder = async (photo: Photo, folderId: string, on: boolean) => {
     if (!session) return;
@@ -593,6 +602,14 @@ function PhotosPage() {
                   className="max-h-[62vh] w-full rounded-lg bg-black/5 object-contain"
                 />
               ) : null}
+              <Button
+                variant="outline"
+                className="h-11 w-full bg-card"
+                disabled={rotating}
+                onClick={() => void rotateSaved(opened)}
+              >
+                {rotating ? <Loader2 className="size-4 animate-spin" /> : <RotateCw className="size-4" />} 90度回転
+              </Button>
               <label className="flex items-center gap-2 text-sm font-medium">
                 <Checkbox
                   checked={opened.checked}

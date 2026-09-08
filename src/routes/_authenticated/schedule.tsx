@@ -584,6 +584,7 @@ function SchedulePage() {
                     const gray = marks[d] ?? isDefaultGray(d);
                     const isToday = d === today;
                     const cellBg = gray ? "var(--schedule-gray)" : "var(--card)";
+                    const cellBorder = gray ? "var(--schedule-gray-border)" : undefined;
                     const h = rowHeight(d);
                     return (
                       <tr key={d} id={`row-${d}`} className="align-top">
@@ -596,6 +597,7 @@ function SchedulePage() {
                             left: dateLeft,
                             height: h,
                             backgroundColor: cellBg,
+                            borderColor: cellBorder,
                             ...(isToday ? { boxShadow: todayShadow(true, false) } : {}),
                           }}
                           onClick={() => holidayMode && void toggleGray(d)}
@@ -630,6 +632,7 @@ function SchedulePage() {
                               style={{
                                 height: h,
                                 backgroundColor: cellBg,
+                                borderColor: cellBorder,
                                 ...(i === 0 ? { left: sizeLeft } : {}),
                                 ...(isToday ? { boxShadow: todayShadow(false, last) } : {}),
                               }}
