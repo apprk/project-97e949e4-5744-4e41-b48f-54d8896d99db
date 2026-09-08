@@ -86,11 +86,11 @@ export function CameraCapture({ open, onClose, onCapture }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/20"
+            className="size-12 text-white hover:bg-white/20"
             aria-label="閉じる"
             onClick={onClose}
           >
-            <X className="size-6" />
+            <X className="size-8" />
           </Button>
         </div>
       </div>
