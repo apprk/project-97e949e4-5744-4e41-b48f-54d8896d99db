@@ -594,6 +594,14 @@ function PhotosPage() {
                   className="max-h-[62vh] w-full rounded-lg bg-black/5 object-contain"
                 />
               ) : null}
+              <Button
+                variant="outline"
+                className="h-11 w-full bg-card"
+                disabled={rotating}
+                onClick={() => void rotateSaved(opened)}
+              >
+                {rotating ? <Loader2 className="size-4 animate-spin" /> : <RotateCw className="size-4" />} 90度回転
+              </Button>
               <label className="flex items-center gap-2 text-sm font-medium">
                 <Checkbox
                   checked={opened.checked}
