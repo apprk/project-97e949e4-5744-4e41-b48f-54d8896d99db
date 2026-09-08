@@ -68,6 +68,7 @@ function PhotosPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkFolderOpen, setBulkFolderOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [rotating, setRotating] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
