@@ -61,7 +61,7 @@ function Home() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-16 pt-6">
-        <nav className="grid gap-4 sm:grid-cols-3">
+        <nav className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {menu.map((m) => (
             <Link
               key={m.to}
