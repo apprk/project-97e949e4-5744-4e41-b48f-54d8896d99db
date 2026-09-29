@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_modes: {
+        Row: {
+          created_at: string
+          mode: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          mode: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          mode?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      app_gate: {
+        Row: {
+          id: number
+          login_id: string
+          pass_hash: string
+          pass_salt: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          login_id: string
+          pass_hash: string
+          pass_salt: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          login_id?: string
+          pass_hash?: string
+          pass_salt?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           password_skip_days: number
@@ -248,18 +290,102 @@ export type Database = {
           id: string
           name: string
           slug: string
+          workplace: string | null
         }
         Insert: {
           created_at?: string
           id: string
           name: string
           slug: string
+          workplace?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
           slug?: string
+          workplace?: string | null
+        }
+        Relationships: []
+      }
+      purchase_writers: {
+        Row: {
+          created_at: string
+          id: string
+          kana: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kana?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kana?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      purchases: {
+        Row: {
+          amount: number | null
+          created_at: string
+          deleted_at: string | null
+          delivered_on: string | null
+          id: string
+          item_name: string
+          model: string | null
+          note: string | null
+          quantity: number | null
+          status: string
+          supplier: string | null
+          unit: string | null
+          updated_at: string
+          user_id: string
+          workplace: string | null
+          writer: string
+          written_on: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          delivered_on?: string | null
+          id?: string
+          item_name?: string
+          model?: string | null
+          note?: string | null
+          quantity?: number | null
+          status?: string
+          supplier?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+          workplace?: string | null
+          writer?: string
+          written_on?: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          delivered_on?: string | null
+          id?: string
+          item_name?: string
+          model?: string | null
+          note?: string | null
+          quantity?: number | null
+          status?: string
+          supplier?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+          workplace?: string | null
+          writer?: string
+          written_on?: string
         }
         Relationships: []
       }
@@ -363,6 +489,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      my_workplace: { Args: never; Returns: string }
     }
     Enums: {
       app_role: "admin" | "user"
