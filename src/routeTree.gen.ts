@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as GateRouteImport } from './routes/gate'
 import { Route as AuthenticatedEquipmentRouteImport } from './routes/_authenticated/equipment'
 import { Route as AuthenticatedPhotosRouteImport } from './routes/_authenticated/photos'
+import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTrashRouteImport } from './routes/_authenticated/trash'
@@ -48,6 +49,11 @@ const AuthenticatedPhotosRoute = AuthenticatedPhotosRouteImport.update({
   path: '/photos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
   id: '/schedule',
   path: '/schedule',
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trash': typeof AuthenticatedTrashRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trash': typeof AuthenticatedTrashRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/gate': typeof GateRoute
   '/_authenticated/equipment': typeof AuthenticatedEquipmentRoute
   '/_authenticated/photos': typeof AuthenticatedPhotosRoute
+  '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/trash': typeof AuthenticatedTrashRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchases'
     | '/schedule'
     | '/settings'
     | '/trash'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchases'
     | '/schedule'
     | '/settings'
     | '/trash'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/_authenticated/equipment'
     | '/_authenticated/photos'
+    | '/_authenticated/purchases'
     | '/_authenticated/schedule'
     | '/_authenticated/settings'
     | '/_authenticated/trash'
@@ -181,6 +193,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPhotosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/purchases': {
+      id: '/_authenticated/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof AuthenticatedPurchasesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/schedule': {
       id: '/_authenticated/schedule'
       path: '/schedule'
@@ -208,6 +227,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedEquipmentRoute: typeof AuthenticatedEquipmentRoute
   AuthenticatedPhotosRoute: typeof AuthenticatedPhotosRoute
+  AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTrashRoute: typeof AuthenticatedTrashRoute
@@ -216,6 +236,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEquipmentRoute: AuthenticatedEquipmentRoute,
   AuthenticatedPhotosRoute: AuthenticatedPhotosRoute,
+  AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTrashRoute: AuthenticatedTrashRoute,
