@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { pinToPassword, rememberLogin, slugToEmail, useAuth, type Profile } from "@/lib/auth";
+import { useServerFn } from "@tanstack/react-start";
+import { listAccounts } from "@/lib/gate.functions";
+import { GATE_TOKEN_KEY, getGateToken } from "@/lib/modes";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -33,20 +36,31 @@ async function bootstrapAdmin() {
 function AuthPage() {
   const router = useRouter();
   const { refresh } = useAuth();
+  const fetchAccounts = useServerFn(listAccounts);
   const [accounts, setAccounts] = useState<Profile[] | null>(null);
   const [selected, setSelected] = useState<Profile | null>(null);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
   const loadAccounts = async () => {
-    const { data } = await supabase.from("profiles").select("id,name,slug").order("created_at");
-    if (!data || data.length === 0) {
-      await bootstrapAdmin();
-      const { data: retry } = await supabase.from("profiles").select("id,name,slug").order("created_at");
-      setAccounts((retry as Profile[]) ?? []);
+    const token = getGateToken();
+    if (!token) {
+      void router.navigate({ to: "/gate", replace: true });
       return;
     }
-    setAccounts(data as Profile[]);
+    const r = await fetchAccounts({ data: { token } });
+    if (!r.ok) {
+      localStorage.removeItem(GATE_TOKEN_KEY);
+      void router.navigate({ to: "/gate", replace: true });
+      return;
+    }
+    if (r.accounts.length === 0) {
+      await bootstrapAdmin();
+      const retry = await fetchAccounts({ data: { token } });
+      setAccounts((retry.accounts as Profile[]) ?? []);
+      return;
+    }
+    setAccounts(r.accounts as Profile[]);
   };
 
   useEffect(() => {

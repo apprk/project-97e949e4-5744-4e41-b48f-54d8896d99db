@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as GateRouteImport } from './routes/gate'
 import { Route as AuthenticatedEquipmentRouteImport } from './routes/_authenticated/equipment'
 import { Route as AuthenticatedPhotosRouteImport } from './routes/_authenticated/photos'
+import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTrashRouteImport } from './routes/_authenticated/trash'
@@ -32,6 +34,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GateRoute = GateRouteImport.update({
+  id: '/gate',
+  path: '/gate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedEquipmentRoute = AuthenticatedEquipmentRouteImport.update({
   id: '/equipment',
   path: '/equipment',
@@ -40,6 +47,11 @@ const AuthenticatedEquipmentRoute = AuthenticatedEquipmentRouteImport.update({
 const AuthenticatedPhotosRoute = AuthenticatedPhotosRouteImport.update({
   id: '/photos',
   path: '/photos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
@@ -61,8 +73,10 @@ const AuthenticatedTrashRoute = AuthenticatedTrashRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trash': typeof AuthenticatedTrashRoute
@@ -70,8 +84,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trash': typeof AuthenticatedTrashRoute
@@ -81,8 +97,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/_authenticated/equipment': typeof AuthenticatedEquipmentRoute
   '/_authenticated/photos': typeof AuthenticatedPhotosRoute
+  '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/trash': typeof AuthenticatedTrashRoute
@@ -92,8 +110,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchases'
     | '/schedule'
     | '/settings'
     | '/trash'
@@ -101,8 +121,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchases'
     | '/schedule'
     | '/settings'
     | '/trash'
@@ -111,8 +133,10 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/gate'
     | '/_authenticated/equipment'
     | '/_authenticated/photos'
+    | '/_authenticated/purchases'
     | '/_authenticated/schedule'
     | '/_authenticated/settings'
     | '/_authenticated/trash'
@@ -122,6 +146,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  GateRoute: typeof GateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -147,6 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gate': {
+      id: '/gate'
+      path: '/gate'
+      fullPath: '/gate'
+      preLoaderRoute: typeof GateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/equipment': {
       id: '/_authenticated/equipment'
       path: '/equipment'
@@ -159,6 +191,13 @@ declare module '@tanstack/react-router' {
       path: '/photos'
       fullPath: '/photos'
       preLoaderRoute: typeof AuthenticatedPhotosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/purchases': {
+      id: '/_authenticated/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof AuthenticatedPurchasesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/schedule': {
@@ -188,6 +227,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedEquipmentRoute: typeof AuthenticatedEquipmentRoute
   AuthenticatedPhotosRoute: typeof AuthenticatedPhotosRoute
+  AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTrashRoute: typeof AuthenticatedTrashRoute
@@ -196,6 +236,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEquipmentRoute: AuthenticatedEquipmentRoute,
   AuthenticatedPhotosRoute: AuthenticatedPhotosRoute,
+  AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTrashRoute: AuthenticatedTrashRoute,
@@ -208,6 +249,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  GateRoute: GateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

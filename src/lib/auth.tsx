@@ -1,14 +1,17 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { MODES, type ModeKey } from "@/lib/modes";
 
-export type Profile = { id: string; name: string; slug: string };
+export type Profile = { id: string; name: string; slug: string; workplace?: string | null };
 
 type AuthState = {
   loading: boolean;
   session: Session | null;
   profile: Profile | null;
   isAdmin: boolean;
+  /** このアカウントが利用できるモード（管理者は全モード） */
+  modes: ModeKey[];
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -46,20 +49,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [modes, setModes] = useState<ModeKey[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = async (uid: string | undefined) => {
     if (!uid) {
       setProfile(null);
       setIsAdmin(false);
+      setModes([]);
       return;
     }
-    const [{ data: p }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("id,name,slug").eq("id", uid).maybeSingle(),
+    const [{ data: p }, { data: roles }, { data: m }] = await Promise.all([
+      supabase.from("profiles").select("id,name,slug,workplace").eq("id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
+      supabase.from("account_modes").select("mode").eq("user_id", uid),
     ]);
+    const admin = !!roles?.some((r) => r.role === "admin");
     setProfile((p as Profile) ?? null);
-    setIsAdmin(!!roles?.some((r) => r.role === "admin"));
+    setIsAdmin(admin);
+    setModes(admin ? MODES.map((x) => x.key) : ((m ?? []).map((x) => x.mode) as ModeKey[]));
   };
 
   useEffect(() => {
@@ -82,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     profile,
     isAdmin,
+    modes,
     refresh: async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
@@ -93,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setProfile(null);
       setIsAdmin(false);
+      setModes([]);
     },
   };
 

@@ -1,12 +1,14 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { CalendarDays, Camera, Wrench, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, loginExpired, clearLoginMemory } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { MODES, getGateToken } from "@/lib/modes";
 
 export const Route = createFileRoute("/")({
   ssr: false,
   beforeLoad: async () => {
+    if (!getGateToken()) throw redirect({ to: "/gate" });
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
     if (loginExpired()) {
@@ -20,26 +22,23 @@ export const Route = createFileRoute("/")({
       { title: "三条工場 業務管理 | ホーム" },
       {
         name: "description",
-        content: "スケジュール・写真・設備保全をスマホとPCから。工場向けの業務管理アプリ。",
+        content: "スケジュール・写真・物品購入・設備保全をスマホとPCから。工場向けの業務管理アプリ。",
       },
       { property: "og:title", content: "三条工場 業務管理 | ホーム" },
       {
         property: "og:description",
-        content: "スケジュール・写真・設備保全をスマホとPCから。工場向けの業務管理アプリ。",
+        content: "スケジュール・写真・物品購入・設備保全をスマホとPCから。工場向けの業務管理アプリ。",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Home,
 });
 
-const menu = [
-  { to: "/schedule", label: "スケジュール", icon: CalendarDays },
-  { to: "/photos", label: "写真", icon: Camera },
-  { to: "/equipment", label: "設備保全", icon: Wrench },
-] as const;
-
 function Home() {
-  const { profile } = useAuth();
+  const { profile, modes } = useAuth();
+  const menu = MODES.filter((m) => modes.includes(m.key));
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +61,7 @@ function Home() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-16 pt-6">
-        <nav className="grid gap-4 sm:grid-cols-3">
+        <nav className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {menu.map((m) => (
             <Link
               key={m.to}
