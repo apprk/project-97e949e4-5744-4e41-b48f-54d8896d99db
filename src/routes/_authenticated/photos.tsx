@@ -191,7 +191,7 @@ function PhotosPage() {
       const { error: dbErr } = await supabase.from("photos").update({ storage_path: newPath }).eq("id", photo.id);
       if (dbErr) throw dbErr;
       await supabase.storage.from("photos").remove([oldPath]);
-      setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, storage_path: newPath } : p)));
+      setPhotos((prev) => (prev ?? []).map((p) => (p.id === photo.id ? { ...p, storage_path: newPath } : p)));
       setOpened((prev) => (prev && prev.id === photo.id ? { ...prev, storage_path: newPath } : prev));
       const { data } = await supabase.storage.from("photos").createSignedUrl(newPath, 3600);
       if (data?.signedUrl) setUrls((prev) => ({ ...prev, [photo.id]: data.signedUrl }));
