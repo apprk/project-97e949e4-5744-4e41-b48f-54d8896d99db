@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as GateRouteImport } from './routes/gate'
 import { Route as AuthenticatedEquipmentRouteImport } from './routes/_authenticated/equipment'
 import { Route as AuthenticatedPhotosRouteImport } from './routes/_authenticated/photos'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
@@ -30,6 +31,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GateRoute = GateRouteImport.update({
+  id: '/gate',
+  path: '/gate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedEquipmentRoute = AuthenticatedEquipmentRouteImport.update({
@@ -61,6 +67,7 @@ const AuthenticatedTrashRoute = AuthenticatedTrashRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
   '/schedule': typeof AuthenticatedScheduleRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
   '/schedule': typeof AuthenticatedScheduleRoute
@@ -81,6 +89,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/gate': typeof GateRoute
   '/_authenticated/equipment': typeof AuthenticatedEquipmentRoute
   '/_authenticated/photos': typeof AuthenticatedPhotosRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
@@ -92,6 +101,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/gate'
     | '/equipment'
     | '/photos'
     | '/schedule'
@@ -101,6 +111,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/gate'
     | '/equipment'
     | '/photos'
     | '/schedule'
@@ -111,6 +122,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/gate'
     | '/_authenticated/equipment'
     | '/_authenticated/photos'
     | '/_authenticated/schedule'
@@ -122,6 +134,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  GateRoute: typeof GateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gate': {
+      id: '/gate'
+      path: '/gate'
+      fullPath: '/gate'
+      preLoaderRoute: typeof GateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/equipment': {
@@ -208,6 +228,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  GateRoute: GateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
