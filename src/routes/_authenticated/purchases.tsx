@@ -127,7 +127,9 @@ function PurchaseTable({
   reload,
   sort,
   onSort,
+  fullDate,
 }: {
+  fullDate?: boolean;
   rows: Purchase[];
   cols: ColKey[];
   footer?: React.ReactNode;
@@ -138,13 +140,15 @@ function PurchaseTable({
   const { isAdmin, session } = useAuth();
   const { update, remove } = usePurchaseActions(reload);
   const [editing, setEditing] = useState<string | null>(null);
+  const txt = (k: ColKey, p: Purchase) =>
+    fullDate && k === "written_on" ? fmtYMD(p.written_on) : fullDate && k === "delivered_on" ? fmtYMD(p.delivered_on) : COLS[k].text(p);
 
   const copyCell = async (t: string) => {
     if (!t) return;
     if (await copyText(t)) toast.success(`コピー: ${t}`, { duration: 1200 });
   };
   const copyRow = async (p: Purchase) => {
-    if (await copyText(toTsv(cols.map((k) => (k === "status" ? STATUS[p.status].label : COLS[k].text(p))))))
+    if (await copyText(toTsv(cols.map((k) => (k === "status" ? STATUS[p.status].label : txt(k, p))))))
       toast.success("1行をコピーしました", { duration: 1200 });
   };
 
@@ -175,7 +179,7 @@ function PurchaseTable({
             ) : (
               <tr key={p.id} className={p.status === "rejected" ? "text-muted-foreground" : ""}>
                 {cols.map((k) => {
-                  const t = COLS[k].text(p);
+                  const t = txt(k, p);
                   return (
                     <td
                       key={k}
@@ -329,7 +333,7 @@ function WriterInput({
 }) {
   const [open, setOpen] = useState(false);
   const list = useMemo(() => matchWriters(writers, value), [writers, value]);
-  const show = open && list.length > 0 && !(list.length === 1 && list[0].name === value);
+  const show = open && list.length > 0 && !(list.length === 1 && list[0]!.name === value);
   return (
     <div className="relative">
       <Input
@@ -342,7 +346,7 @@ function WriterInput({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            if (show) { onChange(list[0].name); setOpen(false); e.preventDefault(); }
+            if (show) { onChange(list[0]!.name); setOpen(false); e.preventDefault(); }
             else onEnter?.();
           }
         }}
@@ -562,11 +566,5 @@ function HistoryView() {
 }
 
 function HistoryTable({ rows, load, sort, onSort }: { rows: Purchase[]; load: () => void; sort: { key: ColKey; dir: 1 | -1 }; onSort: (k: ColKey) => void }) {
-  // 履歴は年を含む記載日・納品日で表示
-  const cols = HISTORY_COLS;
-  const saved = { w: COLS.written_on.text, d: COLS.delivered_on.text };
-  COLS.written_on.text = (p) => fmtYMD(p.written_on);
-  COLS.delivered_on.text = (p) => fmtYMD(p.delivered_on);
-  useEffect(() => () => { COLS.written_on.text = saved.w; COLS.delivered_on.text = saved.d; });
-  return <PurchaseTable rows={rows} cols={cols} reload={load} sort={sort} onSort={onSort} />;
+  return <PurchaseTable rows={rows} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate />;
 }

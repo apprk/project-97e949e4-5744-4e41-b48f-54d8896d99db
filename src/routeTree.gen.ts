@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as GateRouteImport } from './routes/gate'
 import { Route as AuthenticatedEquipmentRouteImport } from './routes/_authenticated/equipment'
 import { Route as AuthenticatedPhotosRouteImport } from './routes/_authenticated/photos'
+import { Route as AuthenticatedPurchaseAnalyticsRouteImport } from './routes/_authenticated/purchase-analytics'
 import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -49,6 +50,12 @@ const AuthenticatedPhotosRoute = AuthenticatedPhotosRouteImport.update({
   path: '/photos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPurchaseAnalyticsRoute =
+  AuthenticatedPurchaseAnalyticsRouteImport.update({
+    id: '/purchase-analytics',
+    path: '/purchase-analytics',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
   id: '/purchases',
   path: '/purchases',
@@ -76,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchase-analytics': typeof AuthenticatedPurchaseAnalyticsRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -87,6 +95,7 @@ export interface FileRoutesByTo {
   '/gate': typeof GateRoute
   '/equipment': typeof AuthenticatedEquipmentRoute
   '/photos': typeof AuthenticatedPhotosRoute
+  '/purchase-analytics': typeof AuthenticatedPurchaseAnalyticsRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -100,6 +109,7 @@ export interface FileRoutesById {
   '/gate': typeof GateRoute
   '/_authenticated/equipment': typeof AuthenticatedEquipmentRoute
   '/_authenticated/photos': typeof AuthenticatedPhotosRoute
+  '/_authenticated/purchase-analytics': typeof AuthenticatedPurchaseAnalyticsRoute
   '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchase-analytics'
     | '/purchases'
     | '/schedule'
     | '/settings'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/equipment'
     | '/photos'
+    | '/purchase-analytics'
     | '/purchases'
     | '/schedule'
     | '/settings'
@@ -136,6 +148,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/_authenticated/equipment'
     | '/_authenticated/photos'
+    | '/_authenticated/purchase-analytics'
     | '/_authenticated/purchases'
     | '/_authenticated/schedule'
     | '/_authenticated/settings'
@@ -193,6 +206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPhotosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/purchase-analytics': {
+      id: '/_authenticated/purchase-analytics'
+      path: '/purchase-analytics'
+      fullPath: '/purchase-analytics'
+      preLoaderRoute: typeof AuthenticatedPurchaseAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/purchases': {
       id: '/_authenticated/purchases'
       path: '/purchases'
@@ -227,6 +247,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedEquipmentRoute: typeof AuthenticatedEquipmentRoute
   AuthenticatedPhotosRoute: typeof AuthenticatedPhotosRoute
+  AuthenticatedPurchaseAnalyticsRoute: typeof AuthenticatedPurchaseAnalyticsRoute
   AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -236,6 +257,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEquipmentRoute: AuthenticatedEquipmentRoute,
   AuthenticatedPhotosRoute: AuthenticatedPhotosRoute,
+  AuthenticatedPurchaseAnalyticsRoute: AuthenticatedPurchaseAnalyticsRoute,
   AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

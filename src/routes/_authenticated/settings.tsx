@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { pinToPassword, rememberLogin, slugToEmail, useAuth } from "@/lib/auth";
+import { AccountModes, AnalyticsLink, GateSettings, WriterMaster } from "@/components/AdminSettings";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -246,6 +247,15 @@ function SettingsPage() {
               </Button>
             </div>
           </section>
+        ) : null}
+
+        {isAdmin ? (
+          <>
+            <AccountModes />
+            <WriterMaster />
+            <AnalyticsLink />
+            <GateSettings />
+          </>
         ) : null}
       </main>
     </div>
