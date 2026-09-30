@@ -333,7 +333,7 @@ function WriterInput({
 }) {
   const [open, setOpen] = useState(false);
   const list = useMemo(() => matchWriters(writers, value), [writers, value]);
-  const show = open && list.length > 0 && !(list.length === 1 && list[0].name === value);
+  const show = open && list.length > 0 && !(list.length === 1 && list[0]!.name === value);
   return (
     <div className="relative">
       <Input
@@ -346,7 +346,7 @@ function WriterInput({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            if (show) { onChange(list[0].name); setOpen(false); e.preventDefault(); }
+            if (show) { onChange(list[0]!.name); setOpen(false); e.preventDefault(); }
             else onEnter?.();
           }
         }}
