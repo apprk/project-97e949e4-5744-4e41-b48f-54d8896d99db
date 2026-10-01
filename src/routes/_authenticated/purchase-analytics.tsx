@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { Input } from "@/components/ui/input";
-import { fmtYen } from "@/lib/purchases";
+import { fmtYen, subtotal } from "@/lib/purchases";
 
 export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   beforeLoad: async () => {
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   component: AnalyticsPage,
 });
 
-type Row = { supplier: string | null; delivered_on: string; amount: number | null };
+type Row = { supplier: string | null; delivered_on: string; amount: number | null; quantity: number | null };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--muted-foreground)"];
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -47,7 +47,7 @@ function AnalyticsPage() {
     setRows(null);
     void supabase
       .from("purchases")
-      .select("supplier,delivered_on,amount")
+      .select("supplier,delivered_on,amount,quantity")
       .is("deleted_at", null)
       .not("delivered_on", "is", null)
       .gte("delivered_on", from)
@@ -60,7 +60,7 @@ function AnalyticsPage() {
     const t = new Map<string, number>();
     let total = 0;
     for (const r of rows ?? []) {
-      const a = Number(r.amount ?? 0);
+      const a = subtotal(r) ?? 0;
       if (!a) continue;
       total += a;
       const s = r.supplier?.trim() || "（未入力）";
@@ -78,14 +78,14 @@ function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader title="物品購入 分析" back="/settings" />
+      <AppHeader title="物品購入 分析" back="/purchases" />
       <main className="mx-auto max-w-4xl space-y-4 px-3 pb-24 pt-4">
         <section className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
           <span className="text-sm font-bold">期間（納品日）</span>
           <Input type="date" className="h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="開始日" />
           <span>〜</span>
           <Input type="date" className="h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="終了日" />
-          <span className="ml-auto text-sm">合計 <b className="text-lg">{fmtYen(total)}</b></span>
+          <span className="ml-auto text-sm">小計合計 <b className="text-lg">{fmtYen(total)}</b></span>
         </section>
 
         {rows === null ? (
