@@ -1,11 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, Loader2, Pencil, Send, Trash2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCopy,
+  ClipboardPaste,
+  Copy,
+  Loader2,
+  Pencil,
+  Search,
+  Send,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
+import { AnalyticsLink, WriterMaster } from "@/components/AdminSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
 import {
   STATUS,
@@ -16,7 +35,9 @@ import {
   fmtYen,
   leadDays,
   matchWriters,
+  searchWords,
   statusText,
+  subtotal,
   toTsv,
   type Purchase,
   type PurchaseStatus,
@@ -37,71 +58,160 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   component: PurchasesPage,
 });
 
-const SELECT = "id,user_id,workplace,written_on,writer,item_name,model,note,quantity,unit,status,supplier,delivered_on,amount,created_at";
+const SELECT =
+  "id,user_id,workplace,written_on,writer,item_name,model,note,quantity,unit,status,supplier,delivered_on,amount,check_reason,created_at";
 
 type ColKey =
   | "written_on" | "workplace" | "writer" | "item_name" | "model" | "note" | "quantity" | "unit"
-  | "status" | "lead" | "delivered_on" | "amount" | "supplier";
+  | "status" | "lead" | "delivered_on" | "amount" | "subtotal" | "supplier";
 
-type Col = { key: ColKey; label: string; w: string; text: (p: Purchase) => string; align?: "right" };
+type Col = { label: string; w: string; text: (p: Purchase, full?: boolean) => string; align?: "right" };
 
 const COLS: Record<ColKey, Col> = {
-  written_on: { key: "written_on", label: "記載日", w: "w-16", text: (p) => fmtMD(p.written_on) },
-  workplace: { key: "workplace", label: "職場", w: "w-24", text: (p) => p.workplace ?? "" },
-  writer: { key: "writer", label: "記載者", w: "w-24", text: (p) => p.writer },
-  item_name: { key: "item_name", label: "品名", w: "w-36", text: (p) => p.item_name },
-  model: { key: "model", label: "型式", w: "w-32", text: (p) => p.model ?? "" },
-  note: { key: "note", label: "備考", w: "w-32", text: (p) => p.note ?? "" },
-  quantity: { key: "quantity", label: "数量", w: "w-16", text: (p) => fmtNum(p.quantity), align: "right" },
-  unit: { key: "unit", label: "単位", w: "w-14", text: (p) => p.unit ?? "" },
-  status: { key: "status", label: "状態", w: "w-24", text: (p) => statusText(p.status) },
-  lead: { key: "lead", label: "目安納期", w: "w-20", text: (p) => { const d = leadDays(p); return d == null ? "" : `${d}日`; }, align: "right" },
-  delivered_on: { key: "delivered_on", label: "納品日", w: "w-20", text: (p) => fmtMD(p.delivered_on) },
-  amount: { key: "amount", label: "金額", w: "w-24", text: (p) => fmtYen(p.amount), align: "right" },
-  supplier: { key: "supplier", label: "発注先", w: "w-32", text: (p) => p.supplier ?? "" },
+  written_on: { label: "記載日", w: "w-16", text: (p, f) => (f ? fmtYMD(p.written_on) : fmtMD(p.written_on)) },
+  workplace: { label: "職場", w: "w-24", text: (p) => p.workplace ?? "" },
+  writer: { label: "記載者", w: "w-24", text: (p) => p.writer },
+  item_name: { label: "品名", w: "w-36", text: (p) => p.item_name },
+  model: { label: "型式", w: "w-32", text: (p) => p.model ?? "" },
+  note: { label: "備考", w: "w-32", text: (p) => p.note ?? "" },
+  quantity: { label: "数量", w: "w-16", text: (p) => fmtNum(p.quantity), align: "right" },
+  unit: { label: "単位", w: "w-14", text: (p) => p.unit ?? "" },
+  status: { label: "状態", w: "w-24", text: (p) => statusText(p.status) },
+  lead: {
+    label: "目安納期",
+    w: "w-20",
+    text: (p) => {
+      const d = leadDays(p);
+      return d == null ? "" : d > 0 ? `${d}日` : "-";
+    },
+    align: "right",
+  },
+  delivered_on: { label: "納品日", w: "w-32", text: (p, f) => (f ? fmtYMD(p.delivered_on) : fmtMD(p.delivered_on)) },
+  amount: { label: "単価", w: "w-28", text: (p) => fmtYen(p.amount), align: "right" },
+  subtotal: { label: "小計", w: "w-24", text: (p) => fmtYen(subtotal(p)), align: "right" },
+  supplier: { label: "発注先", w: "w-36", text: (p) => p.supplier ?? "" },
 };
 
-const BASE: ColKey[] = ["writer", "item_name", "model", "note", "quantity", "unit", "status", "lead", "delivered_on", "amount", "supplier"];
-const ENTRY_COLS: ColKey[] = ["written_on", ...BASE];
-const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASE];
+/** ワンクリックコピー・一括コピーの対象（6項目） */
+const COPY_KEYS = ["writer", "item_name", "model", "note", "quantity", "unit"] as const;
+type CopyKey = (typeof COPY_KEYS)[number];
+type Clip = Record<CopyKey, string>;
+const COPYABLE = new Set<ColKey>(COPY_KEYS);
+/** 管理者が一覧上で直接入力できる項目 */
+const ADMIN_INLINE = new Set<ColKey>(["delivered_on", "amount", "supplier"]);
+
+const ADMIN_TAIL: ColKey[] = ["lead", "delivered_on", "amount", "subtotal", "supplier"];
+const BASIC: ColKey[] = ["writer", "item_name", "model", "note", "quantity", "unit", "status"];
+
+const googleSearch = (q: string) =>
+  window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, "_blank", "noopener,noreferrer");
+
+const clipFrom = (p: Purchase): Clip => ({
+  writer: p.writer ?? "",
+  item_name: p.item_name ?? "",
+  model: p.model ?? "",
+  note: p.note ?? "",
+  quantity: fmtNum(p.quantity),
+  unit: p.unit ?? "",
+});
 
 function PurchasesPage() {
-  const [tab, setTab] = useState<"entry" | "history">("entry");
+  const { isAdmin } = useAuth();
+  const [tab, setTab] = useState<"entry" | "history" | "settings">("entry");
   const [writers, setWriters] = useState<Writer[]>([]);
+  // 一括コピー（アプリ内専用。記入・履歴の間で共有）
+  const [clip, setClip] = useState<Clip | null>(null);
+  const [pendingPaste, setPendingPaste] = useState<Clip | null>(null);
 
-  useEffect(() => {
+  const loadWriters = useCallback(() => {
     void supabase
       .from("purchase_writers")
       .select("id,name,kana")
       .order("kana")
       .then(({ data }) => setWriters((data as Writer[]) ?? []));
   }, []);
+  useEffect(() => loadWriters(), [loadWriters]);
+
+  const bulkCopy = (p: Purchase) => {
+    setClip(clipFrom(p));
+    toast.success("一括コピーしました（一括ペーストで記入欄へ入ります）", { duration: 1500 });
+  };
+
+  const tabs = isAdmin ? (["entry", "history", "settings"] as const) : (["entry", "history"] as const);
+  const tabLabel = { entry: "記入", history: "履歴", settings: "設定" };
 
   return (
     <div className="min-h-screen bg-background">
       <AppHeader title="物品購入" />
-      <div className="mx-auto max-w-[1400px] px-3 pt-3">
+      <div className="mx-auto max-w-[1500px] px-3 pt-3">
         <div className="inline-flex rounded-xl border border-border bg-card p-1">
-          {(["entry", "history"] as const).map((t) => (
+          {tabs.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => {
+                if (t === "settings") loadWriters();
+                setTab(t);
+              }}
               className={`rounded-lg px-5 py-2 text-sm font-bold ${tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
             >
-              {t === "entry" ? "記入" : "履歴"}
+              {tabLabel[t]}
             </button>
           ))}
         </div>
       </div>
-      {tab === "entry" ? <EntryView writers={writers} /> : <HistoryView />}
+      {tab === "entry" ? (
+        <EntryView
+          writers={writers}
+          clip={clip}
+          onBulkCopy={bulkCopy}
+          initialPaste={pendingPaste}
+          onConsumePaste={() => setPendingPaste(null)}
+        />
+      ) : tab === "history" ? (
+        <HistoryView
+          clip={clip}
+          onBulkCopy={bulkCopy}
+          onPaste={() => {
+            if (!clip) return;
+            setPendingPaste(clip);
+            setTab("entry");
+          }}
+        />
+      ) : isAdmin ? (
+        <main className="mx-auto max-w-md space-y-6 px-4 pb-24 pt-5">
+          <WriterMaster />
+          <AnalyticsLink />
+        </main>
+      ) : null}
     </div>
   );
 }
 
 /* ---------------- 共通: 一覧テーブル ---------------- */
 
-function usePurchaseActions(reload: () => void) {
+function PurchaseTable({
+  rows,
+  cols,
+  footer,
+  reload,
+  sort,
+  onSort,
+  fullDate,
+  onBulkCopy,
+}: {
+  rows: Purchase[];
+  cols: ColKey[];
+  footer?: React.ReactNode;
+  reload: () => void;
+  sort?: { key: ColKey; dir: 1 | -1 };
+  onSort?: (k: ColKey) => void;
+  fullDate?: boolean;
+  onBulkCopy: (p: Purchase) => void;
+}) {
+  const { isAdmin, session } = useAuth();
+  const [editing, setEditing] = useState<string | null>(null);
+
   const update = async (id: string, patch: Partial<Purchase>) => {
     const { error } = await supabase.from("purchases").update(patch).eq("id", id);
     if (error) {
@@ -117,39 +227,20 @@ function usePurchaseActions(reload: () => void) {
     else toast.success("削除しました");
     reload();
   };
-  return { update, remove };
-}
-
-function PurchaseTable({
-  rows,
-  cols,
-  footer,
-  reload,
-  sort,
-  onSort,
-  fullDate,
-}: {
-  fullDate?: boolean;
-  rows: Purchase[];
-  cols: ColKey[];
-  footer?: React.ReactNode;
-  reload: () => void;
-  sort?: { key: ColKey; dir: 1 | -1 };
-  onSort?: (k: ColKey) => void;
-}) {
-  const { isAdmin, session } = useAuth();
-  const { update, remove } = usePurchaseActions(reload);
-  const [editing, setEditing] = useState<string | null>(null);
-  const txt = (k: ColKey, p: Purchase) =>
-    fullDate && k === "written_on" ? fmtYMD(p.written_on) : fullDate && k === "delivered_on" ? fmtYMD(p.delivered_on) : COLS[k].text(p);
+  const markChecked = async (id: string) => {
+    const { error } = await supabase.rpc("mark_purchase_checked", { _id: id });
+    if (error) toast.error("更新に失敗しました");
+    else toast.success("確認済にしました");
+    reload();
+  };
 
   const copyCell = async (t: string) => {
     if (!t) return;
     if (await copyText(t)) toast.success(`コピー: ${t}`, { duration: 1200 });
   };
-  const copyRow = async (p: Purchase) => {
-    if (await copyText(toTsv(cols.map((k) => (k === "status" ? STATUS[p.status].label : txt(k, p))))))
-      toast.success("1行をコピーしました", { duration: 1200 });
+  const copyRowTsv = async (p: Purchase) => {
+    const c = clipFrom(p);
+    if (await copyText(toTsv(COPY_KEYS.map((k) => c[k])))) toast.success("Excel用に1行コピーしました", { duration: 1200 });
   };
 
   return (
@@ -175,18 +266,53 @@ function PurchaseTable({
         <tbody>
           {rows.map((p) =>
             editing === p.id ? (
-              <EditRow key={p.id} p={p} cols={cols} admin={isAdmin} onCancel={() => setEditing(null)} onSave={async (patch) => { if (await update(p.id, patch)) { setEditing(null); toast.success("修正しました"); } }} />
+              <EditRow
+                key={p.id}
+                p={p}
+                cols={cols}
+                fullDate={fullDate}
+                onCancel={() => setEditing(null)}
+                onSave={async (patch) => {
+                  if (await update(p.id, patch)) {
+                    setEditing(null);
+                    toast.success("修正しました");
+                  }
+                }}
+              />
             ) : (
               <tr key={p.id} className={p.status === "rejected" ? "text-muted-foreground" : ""}>
                 {cols.map((k) => {
-                  const t = txt(k, p);
+                  const t = COLS[k].text(p, fullDate);
+                  const strike = p.status === "rejected" && k !== "status" ? "line-through" : "";
+                  const right = COLS[k].align === "right" ? "text-right" : "";
+                  if (isAdmin && ADMIN_INLINE.has(k)) {
+                    return (
+                      <td key={k} className="border-b border-r border-border p-1 align-top">
+                        <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier"} onSave={(patch) => update(p.id, patch)} />
+                      </td>
+                    );
+                  }
+                  if (k === "status") {
+                    return (
+                      <td key={k} className="border-b border-r border-border px-2 py-2 align-top whitespace-nowrap">
+                        <StatusCell p={p} />
+                      </td>
+                    );
+                  }
+                  if (COPYABLE.has(k)) {
+                    return (
+                      <td
+                        key={k}
+                        title={t ? "クリックでコピー" : undefined}
+                        onClick={() => copyCell(t)}
+                        className={`cursor-copy border-b border-r border-border px-2 py-2 align-top whitespace-pre-wrap break-words hover:bg-accent/40 ${right} ${strike}`}
+                      >
+                        {t}
+                      </td>
+                    );
+                  }
                   return (
-                    <td
-                      key={k}
-                      title={t ? "クリックでコピー" : undefined}
-                      onClick={() => copyCell(k === "status" ? STATUS[p.status].label : t)}
-                      className={`cursor-copy border-b border-r border-border px-2 py-2 align-top whitespace-pre-wrap break-words hover:bg-accent/40 ${COLS[k].align === "right" ? "text-right" : ""} ${p.status === "rejected" && k !== "status" ? "line-through" : ""}`}
-                    >
+                    <td key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right} ${strike}`}>
                       {t}
                     </td>
                   );
@@ -197,7 +323,7 @@ function PurchaseTable({
                       <>
                         <Button
                           size="sm"
-                          variant={p.status === "approved" || p.status === "delivered" ? "default" : "outline"}
+                          variant={p.status === "approved" ? "default" : "outline"}
                           className="h-8 px-2"
                           disabled={p.status === "delivered"}
                           onClick={() => update(p.id, { status: p.status === "approved" ? "pending" : "approved" })}
@@ -213,19 +339,39 @@ function PurchaseTable({
                         >
                           <X className="size-4" /> 却下
                         </Button>
+                        <NeedsCheckButton p={p} onSave={(reason) => update(p.id, { status: "needs_check", check_reason: reason })} />
                       </>
+                    ) : null}
+                    {p.status === "needs_check" ? (
+                      <Button size="sm" className="h-8 px-2" onClick={() => markChecked(p.id)}>
+                        ✅ 確認済
+                      </Button>
                     ) : null}
                     {isAdmin || (p.user_id === session?.user.id && p.status === "pending") ? (
                       <>
-                        <Button size="icon" variant="ghost" className="size-8" aria-label="修正" onClick={() => setEditing(p.id)}>
+                        <Button size="icon" variant="ghost" className="size-8" aria-label="修正" title="修正" onClick={() => setEditing(p.id)}>
                           <Pencil className="size-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="削除" onClick={() => remove(p.id)}>
+                        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="削除" title="削除" onClick={() => remove(p.id)}>
                           <Trash2 className="size-4" />
                         </Button>
                       </>
                     ) : null}
-                    <Button size="icon" variant="ghost" className="size-8" aria-label="1行コピー" onClick={() => copyRow(p)}>
+                    <Button size="sm" variant="outline" className="h-8 bg-card px-2 text-xs" title="アプリ内の一括コピー（一括ペーストで記入欄へ入ります）" onClick={() => onBulkCopy(p)}>
+                      <ClipboardCopy className="size-4" /> 一括コピー
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-8"
+                      aria-label="Web検索"
+                      title={`Web検索：${searchWords(p)}`}
+                      disabled={!searchWords(p)}
+                      onClick={() => googleSearch(searchWords(p))}
+                    >
+                      <Search className="size-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-8" aria-label="Excel用に行コピー" title="Excel用に行コピー" onClick={() => copyRowTsv(p)}>
                       <Copy className="size-4" />
                     </Button>
                   </div>
@@ -240,74 +386,155 @@ function PurchaseTable({
   );
 }
 
+function StatusCell({ p }: { p: Purchase }) {
+  const label = statusText(p.status);
+  if (!p.check_reason || (p.status !== "needs_check" && p.status !== "checked")) return <span>{label}</span>;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="underline decoration-dotted underline-offset-4" title="要確認理由を表示">
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72">
+        <div className="text-xs font-bold text-muted-foreground">【要確認理由】</div>
+        <p className="mt-1 whitespace-pre-wrap text-sm">{p.check_reason}</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NeedsCheckButton({ p, onSave }: { p: Purchase; onSave: (reason: string) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState(p.check_reason ?? "");
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setReason(p.check_reason ?? ""); }}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant={p.status === "needs_check" ? "default" : "outline"} className="h-8 px-2" disabled={p.status === "delivered"}>
+          <TriangleAlert className="size-4" /> 要確認
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80">
+        <div className="text-sm font-bold">【要確認理由】</div>
+        <Textarea
+          className="mt-2 min-h-24"
+          placeholder="例：型式を再確認してください"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          autoFocus
+        />
+        <div className="mt-2 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>取消</Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              if (await onSave(reason.trim())) {
+                setOpen(false);
+                toast.success("要確認にしました");
+              }
+            }}
+          >
+            要確認にする
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** 管理者専用：納品日・単価・発注先を一覧上で直接入力 */
+function InlineAdminCell({
+  p,
+  k,
+  onSave,
+}: {
+  p: Purchase;
+  k: "delivered_on" | "amount" | "supplier";
+  onSave: (patch: Partial<Purchase>) => Promise<boolean>;
+}) {
+  const initial = k === "amount" ? (p.amount == null ? "" : String(Number(p.amount))) : (p[k] ?? "");
+  const [v, setV] = useState(initial);
+  useEffect(() => setV(initial), [initial]);
+  const commit = (val: string) => {
+    if (val === initial) return;
+    if (k === "amount") {
+      const t = val.replace(/[,円\s]/g, "");
+      const n = t === "" ? null : Number(t);
+      if (n != null && !Number.isFinite(n)) { setV(initial); return; }
+      void onSave({ amount: n });
+    } else if (k === "delivered_on") {
+      void onSave({ delivered_on: val || null });
+    } else {
+      void onSave({ supplier: val.trim() || null });
+    }
+  };
+  return (
+    <Input
+      className={`h-9 min-w-0 px-1.5 text-sm ${k === "amount" ? "text-right" : ""}`}
+      type={k === "delivered_on" ? "date" : "text"}
+      inputMode={k === "amount" ? "decimal" : undefined}
+      placeholder={k === "amount" ? "単価" : k === "supplier" ? "発注先" : undefined}
+      aria-label={COLS[k].label}
+      value={v}
+      onChange={(e) => {
+        setV(e.target.value);
+        if (k === "delivered_on") commit(e.target.value);
+      }}
+      onBlur={() => k !== "delivered_on" && commit(v)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setV(initial);
+      }}
+    />
+  );
+}
+
+/** 修正（基本項目のみ。管理者項目は一覧上で直接入力） */
 function EditRow({
   p,
   cols,
-  admin,
+  fullDate,
   onSave,
   onCancel,
 }: {
   p: Purchase;
   cols: ColKey[];
-  admin: boolean;
+  fullDate?: boolean;
   onSave: (patch: Partial<Purchase>) => void;
   onCancel: () => void;
 }) {
-  const [v, setV] = useState({
-    writer: p.writer,
-    item_name: p.item_name,
-    model: p.model ?? "",
-    note: p.note ?? "",
-    quantity: fmtNum(p.quantity),
-    unit: p.unit ?? "",
-    supplier: p.supplier ?? "",
-    delivered_on: p.delivered_on ?? "",
-    amount: p.amount == null ? "" : String(p.amount),
-  });
-  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: e.target.value });
-  const basic = ["writer", "item_name", "model", "note", "quantity", "unit"] as const;
-  const adminOnly = ["supplier", "delivered_on", "amount"] as const;
-
+  const [v, setV] = useState<Clip>(clipFrom(p));
   const save = () => {
-    const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(/[,円\s]/g, "")));
-    const patch: Partial<Purchase> = {
+    const q = v.quantity.trim() === "" ? null : Number(v.quantity.replace(/[,\s]/g, ""));
+    onSave({
       writer: v.writer.trim(),
       item_name: v.item_name.trim(),
       model: v.model.trim() || null,
       note: v.note.trim() || null,
-      quantity: num(v.quantity),
+      quantity: q != null && Number.isFinite(q) ? q : null,
       unit: v.unit.trim() || null,
-    };
-    if (admin) {
-      patch.supplier = v.supplier.trim() || null;
-      patch.delivered_on = v.delivered_on || null;
-      patch.amount = num(v.amount);
-    }
-    onSave(patch);
+    });
   };
-
   return (
     <tr className="bg-accent/30">
-      {cols.map((k) => {
-        const editable =
-          (basic as readonly string[]).includes(k) || (admin && (adminOnly as readonly string[]).includes(k));
-        return (
-          <td key={k} className="border-b border-r border-border p-1 align-top">
-            {editable ? (
-              <Input
-                className="h-9 min-w-0 px-1.5 text-sm"
-                type={k === "delivered_on" ? "date" : "text"}
-                inputMode={k === "quantity" || k === "amount" ? "decimal" : undefined}
-                value={v[k as keyof typeof v]}
-                onChange={set(k as keyof typeof v)}
-                onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") onCancel(); }}
-              />
-            ) : (
-              <span className="block px-1 py-2 text-muted-foreground">{COLS[k].text(p)}</span>
-            )}
-          </td>
-        );
-      })}
+      {cols.map((k) => (
+        <td key={k} className="border-b border-r border-border p-1 align-top">
+          {COPYABLE.has(k) ? (
+            <Input
+              className="h-9 min-w-0 px-1.5 text-sm"
+              inputMode={k === "quantity" ? "decimal" : undefined}
+              value={v[k as CopyKey]}
+              onChange={(e) => setV({ ...v, [k]: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") onCancel();
+              }}
+            />
+          ) : (
+            <span className="block px-1 py-2 text-muted-foreground whitespace-nowrap">{COLS[k].text(p, fullDate)}</span>
+          )}
+        </td>
+      ))}
       <td className="border-b border-border p-1 whitespace-nowrap">
         <Button size="sm" className="h-8" onClick={save}>保存</Button>
         <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>取消</Button>
@@ -341,13 +568,19 @@ function WriterInput({
         className="h-10 min-w-0 px-1.5 text-sm"
         placeholder="記載者"
         value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            if (show) { onChange(list[0]!.name); setOpen(false); e.preventDefault(); }
-            else onEnter?.();
+            if (show) {
+              onChange(list[0]!.name);
+              setOpen(false);
+              e.preventDefault();
+            } else onEnter?.();
           }
         }}
       />
@@ -359,7 +592,10 @@ function WriterInput({
                 type="button"
                 className="flex w-full items-baseline gap-2 px-3 py-2.5 text-left hover:bg-accent"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onChange(w.name); setOpen(false); }}
+                onClick={() => {
+                  onChange(w.name);
+                  setOpen(false);
+                }}
               >
                 <span className="font-bold">{w.name}</span>
                 <span className="text-xs text-muted-foreground">{w.kana}</span>
@@ -376,18 +612,40 @@ function WriterInput({
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-function EntryView({ writers }: { writers: Writer[] }) {
-  const { session } = useAuth();
+function EntryView({
+  writers,
+  clip,
+  onBulkCopy,
+  initialPaste,
+  onConsumePaste,
+}: {
+  writers: Writer[];
+  clip: Clip | null;
+  onBulkCopy: (p: Purchase) => void;
+  initialPaste: Clip | null;
+  onConsumePaste: () => void;
+}) {
+  const { session, isAdmin } = useAuth();
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
   const [rows, setRows] = useState<Purchase[] | null>(null);
   // 記載者はこの記入画面を開いている間だけ引き継ぐ（画面を閉じると消える）
-  const [writer, setWriter] = useState("");
+  const [writer, setWriter] = useState(initialPaste?.writer ?? "");
   const blank = { item_name: "", model: "", note: "", quantity: "", unit: "" };
-  const [draft, setDraft] = useState(blank);
+  const [draft, setDraft] = useState(
+    initialPaste
+      ? { item_name: initialPaste.item_name, model: initialPaste.model, note: initialPaste.note, quantity: initialPaste.quantity, unit: initialPaste.unit }
+      : blank,
+  );
   const [busy, setBusy] = useState(false);
   const itemRef = useRef<HTMLInputElement>(null);
   const writerRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialPaste) onConsumePaste();
+  }, []);
+
+  const cols: ColKey[] = isAdmin ? ["written_on", ...BASIC, ...ADMIN_TAIL] : ["written_on", ...BASIC];
 
   const load = useCallback(async () => {
     const start = `${ym.y}-${pad(ym.m)}-01`;
@@ -414,10 +672,24 @@ function EntryView({ writers }: { writers: Writer[] }) {
   };
   const isCurrent = ym.y === now.getFullYear() && ym.m === now.getMonth() + 1;
 
+  const paste = () => {
+    if (!clip) return;
+    setWriter(clip.writer);
+    setDraft({ item_name: clip.item_name, model: clip.model, note: clip.note, quantity: clip.quantity, unit: clip.unit });
+  };
+
   const submit = async () => {
     if (!session) return;
-    if (!writer.trim()) { toast.error("記載者を入力してください"); writerRef.current?.focus(); return; }
-    if (!draft.item_name.trim()) { toast.error("品名を入力してください"); itemRef.current?.focus(); return; }
+    if (!writer.trim()) {
+      toast.error("記載者を入力してください");
+      writerRef.current?.focus();
+      return;
+    }
+    if (!draft.item_name.trim()) {
+      toast.error("品名を入力してください");
+      itemRef.current?.focus();
+      return;
+    }
     setBusy(true);
     const q = draft.quantity.trim() === "" ? null : Number(draft.quantity);
     const { error } = await supabase.from("purchases").insert({
@@ -430,7 +702,10 @@ function EntryView({ writers }: { writers: Writer[] }) {
       unit: draft.unit.trim() || null,
     });
     setBusy(false);
-    if (error) { toast.error("依頼できませんでした"); return; }
+    if (error) {
+      toast.error("依頼できませんでした");
+      return;
+    }
     toast.success("購入依頼しました");
     setDraft(blank);
     if (!isCurrent) setYm({ y: now.getFullYear(), m: now.getMonth() + 1 });
@@ -439,13 +714,15 @@ function EntryView({ writers }: { writers: Writer[] }) {
   };
 
   const d = (k: keyof typeof blank) => (e: React.ChangeEvent<HTMLInputElement>) => setDraft({ ...draft, [k]: e.target.value });
-  const enter = (e: React.KeyboardEvent) => { if (e.key === "Enter") void submit(); };
-  const colCount = ENTRY_COLS.length + 1;
+  const enter = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") void submit();
+  };
+  const words = searchWords(draft);
 
   const footer = (
     <tr className="bg-primary/5">
       <td className="border-r border-border px-2 text-xs text-muted-foreground">新規</td>
-      <td className="border-r border-border p-1 min-w-24">
+      <td className="min-w-24 border-r border-border p-1">
         <WriterInput value={writer} onChange={setWriter} writers={writers} inputRef={writerRef} onEnter={() => itemRef.current?.focus()} />
       </td>
       <td className="border-r border-border p-1"><Input ref={itemRef} className="h-10 min-w-0 px-1.5 text-sm" placeholder="品名" value={draft.item_name} onChange={d("item_name")} onKeyDown={enter} /></td>
@@ -453,16 +730,32 @@ function EntryView({ writers }: { writers: Writer[] }) {
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="備考" value={draft.note} onChange={d("note")} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-right text-sm" inputMode="decimal" placeholder="数量" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value.replace(/[^\d.]/g, "") })} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="単位" value={draft.unit} onChange={d("unit")} onKeyDown={enter} /></td>
-      <td colSpan={colCount - 7} className="p-1">
-        <Button className="h-10" disabled={busy} onClick={submit}>
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} 購入依頼
-        </Button>
+      <td colSpan={cols.length - 7 + 1} className="p-1">
+        <div className="flex items-center gap-1">
+          <Button className="h-10" disabled={busy} onClick={submit}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} 購入依頼
+          </Button>
+          <Button variant="outline" className="h-10 bg-card px-2 text-xs" title="一括コピーした内容を記入欄へ入れます" onClick={paste}>
+            <ClipboardPaste className="size-4" /> 一括ペースト
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-10"
+            aria-label="Web検索"
+            title={words ? `Web検索：${words}` : "品名か型式を入力すると検索できます"}
+            disabled={!words}
+            onClick={() => googleSearch(words)}
+          >
+            <Search className="size-4" />
+          </Button>
+        </div>
       </td>
     </tr>
   );
 
   return (
-    <main className="mx-auto max-w-[1400px] px-3 pb-24 pt-3">
+    <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
       <div className="mb-2 flex items-center gap-2">
         <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => move(-1)}><ChevronLeft className="size-5" /></Button>
         <h2 className="min-w-40 text-center text-lg font-bold">{ym.y}年{ym.m}月 物品購入</h2>
@@ -473,9 +766,9 @@ function EntryView({ writers }: { writers: Writer[] }) {
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
         <>
-          <PurchaseTable rows={rows} cols={ENTRY_COLS} reload={load} footer={footer} />
+          <PurchaseTable rows={rows} cols={cols} reload={load} footer={footer} onBulkCopy={onBulkCopy} />
           {rows.length === 0 ? <p className="mt-2 text-xs text-muted-foreground">この月の依頼はまだありません。一番下の行に入力してください。</p> : null}
-          <p className="mt-2 text-xs text-muted-foreground">各項目をタップするとコピーできます。</p>
+          <p className="mt-2 text-xs text-muted-foreground">記載者・品名・型式・備考・数量・単位はタップするとコピーできます。</p>
         </>
       )}
     </main>
@@ -484,16 +777,22 @@ function EntryView({ writers }: { writers: Writer[] }) {
 
 /* ---------------- 履歴 ---------------- */
 
-function HistoryView() {
+const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...ADMIN_TAIL];
+
+function HistoryView({ clip, onBulkCopy, onPaste }: { clip: Clip | null; onBulkCopy: (p: Purchase) => void; onPaste: () => void }) {
   const [rows, setRows] = useState<Purchase[] | null>(null);
-  const [f, setF] = useState({ workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" });
-  const [sort, setSort] = useState<{ key: ColKey; dir: 1 | -1 }>({ key: "written_on", dir: -1 });
+  const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" };
+  const [f, setF] = useState(empty);
+  // 記入画面と同じく古いものが上
+  const [sort, setSort] = useState<{ key: ColKey; dir: 1 | -1 }>({ key: "written_on", dir: 1 });
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("purchases").select(SELECT).is("deleted_at", null).order("written_on", { ascending: false }).limit(5000);
+    const { data } = await supabase.from("purchases").select(SELECT).is("deleted_at", null).order("written_on").order("created_at").limit(5000);
     setRows((data as Purchase[]) ?? []);
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const workplaces = useMemo(() => [...new Set((rows ?? []).map((r) => r.workplace).filter(Boolean))] as string[], [rows]);
 
@@ -511,6 +810,7 @@ function HistoryView() {
       switch (sort.key) {
         case "quantity": return r.quantity ?? -Infinity;
         case "amount": return r.amount ?? -Infinity;
+        case "subtotal": return subtotal(r) ?? -Infinity;
         case "lead": return leadDays(r) ?? -Infinity;
         case "written_on": return r.written_on + r.created_at;
         case "delivered_on": return r.delivered_on ?? "";
@@ -528,11 +828,10 @@ function HistoryView() {
   const inp = (k: keyof typeof f, ph: string) => (
     <Input className="h-10 text-sm" placeholder={ph} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
   );
-  const total = view.reduce((s, r) => s + (r.amount ?? 0), 0);
   const selectCls = "h-10 rounded-md border border-input bg-background px-2 text-sm";
 
   return (
-    <main className="mx-auto max-w-[1400px] px-3 pb-24 pt-3">
+    <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-4 lg:grid-cols-8">
         <select className={selectCls} value={f.workplace} onChange={(e) => setF({ ...f, workplace: e.target.value })} aria-label="職場">
           <option value="">職場：すべて</option>
@@ -551,20 +850,18 @@ function HistoryView() {
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
         <span>{view.length}件</span>
-        <span className="text-muted-foreground">金額合計 {fmtYen(total)}</span>
         {Object.values(f).some(Boolean) ? (
-          <Button size="sm" variant="ghost" onClick={() => setF({ workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" })}>条件をクリア</Button>
+          <Button size="sm" variant="ghost" onClick={() => setF(empty)}>条件をクリア</Button>
         ) : null}
+        <Button size="sm" variant="outline" className="ml-auto bg-card" disabled={!clip} title="一括コピーした内容を記入画面の入力欄へ入れます" onClick={onPaste}>
+          <ClipboardPaste className="size-4" /> 一括ペースト（記入へ）
+        </Button>
       </div>
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <HistoryTable rows={view} load={load} sort={sort} onSort={onSort} />
+        <PurchaseTable rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} />
       )}
     </main>
   );
-}
-
-function HistoryTable({ rows, load, sort, onSort }: { rows: Purchase[]; load: () => void; sort: { key: ColKey; dir: 1 | -1 }; onSort: (k: ColKey) => void }) {
-  return <PurchaseTable rows={rows} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate />;
 }
