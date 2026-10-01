@@ -32,6 +32,24 @@ export type Database = {
         }
         Relationships: []
       }
+      account_pins: {
+        Row: {
+          pin: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          pin: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          pin?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_gate: {
         Row: {
           id: number
@@ -287,6 +305,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          disabled_at: string | null
           id: string
           name: string
           slug: string
@@ -294,6 +313,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          disabled_at?: string | null
           id: string
           name: string
           slug: string
@@ -301,6 +321,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          disabled_at?: string | null
           id?: string
           name?: string
           slug?: string
@@ -332,6 +353,7 @@ export type Database = {
       purchases: {
         Row: {
           amount: number | null
+          check_reason: string | null
           created_at: string
           deleted_at: string | null
           delivered_on: string | null
@@ -351,6 +373,7 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
+          check_reason?: string | null
           created_at?: string
           deleted_at?: string | null
           delivered_on?: string | null
@@ -370,6 +393,7 @@ export type Database = {
         }
         Update: {
           amount?: number | null
+          check_reason?: string | null
           created_at?: string
           deleted_at?: string | null
           delivered_on?: string | null
@@ -489,7 +513,9 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      mark_purchase_checked: { Args: { _id: string }; Returns: undefined }
       my_workplace: { Args: never; Returns: string }
+      set_my_pin: { Args: { _pin: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"
