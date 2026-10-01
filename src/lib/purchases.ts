@@ -1,4 +1,4 @@
-export type PurchaseStatus = "pending" | "approved" | "rejected" | "delivered";
+export type PurchaseStatus = "pending" | "approved" | "rejected" | "needs_check" | "checked" | "delivered";
 
 export type Purchase = {
   id: string;
@@ -15,6 +15,7 @@ export type Purchase = {
   supplier: string | null;
   delivered_on: string | null;
   amount: number | null;
+  check_reason: string | null;
   created_at: string;
 };
 
@@ -24,10 +25,20 @@ export const STATUS: Record<PurchaseStatus, { icon: string; label: string }> = {
   pending: { icon: "🟡", label: "申請中" },
   approved: { icon: "🟢", label: "承認済" },
   rejected: { icon: "🔴", label: "却下" },
+  needs_check: { icon: "🟠", label: "要確認" },
+  checked: { icon: "✅", label: "確認済" },
   delivered: { icon: "🔵", label: "納品済" },
 };
 
 export const statusText = (s: PurchaseStatus) => `${STATUS[s].icon} ${STATUS[s].label}`;
+
+/** 小計 = 単価 × 数量 */
+export const subtotal = (p: Pick<Purchase, "amount" | "quantity">) =>
+  p.amount == null || p.quantity == null ? null : Math.round(Number(p.amount) * Number(p.quantity) * 100) / 100;
+
+/** Web検索キーワード（品名 型式） */
+export const searchWords = (p: { item_name?: string | null; model?: string | null }) =>
+  [p.item_name?.trim(), p.model?.trim()].filter(Boolean).join(" ");
 
 /** 目安納期 = 納品日 − 記載日（日数） */
 export function leadDays(p: Pick<Purchase, "written_on" | "delivered_on">): number | null {
