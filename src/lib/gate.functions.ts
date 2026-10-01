@@ -53,7 +53,7 @@ export const listAccounts = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     if (!tokenValid(data.token)) return { ok: false as const, accounts: [] };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rows } = await supabaseAdmin.from("profiles").select("id,name,slug").order("created_at");
+    const { data: rows } = await supabaseAdmin.from("profiles").select("id,name,slug").is("disabled_at", null).order("created_at");
     return { ok: true as const, accounts: rows ?? [] };
   });
 

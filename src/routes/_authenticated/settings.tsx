@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { pinToPassword, rememberLogin, slugToEmail, useAuth } from "@/lib/auth";
-import { AccountModes, AnalyticsLink, GateSettings, WriterMaster } from "@/components/AdminSettings";
+import { AccountModes, GateSettings } from "@/components/AdminSettings";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -78,6 +78,7 @@ function SettingsPage() {
       toast.error("変更に失敗しました");
       return;
     }
+    await supabase.rpc("set_my_pin", { _pin: next });
     setCurrent("");
     setNext("");
     toast.success("パスワードを変更しました");
@@ -111,6 +112,7 @@ function SettingsPage() {
       password: pinToPassword(newPin),
       options: { emailRedirectTo: window.location.origin, data: { name: newName.trim(), slug: newSlug } },
     });
+    if (!error) await supabase.rpc("set_my_pin", { _pin: newPin });
     setBusy(false);
     if (error) {
       toast.error("追加に失敗しました（IDが重複している可能性があります）");
@@ -252,8 +254,6 @@ function SettingsPage() {
         {isAdmin ? (
           <>
             <AccountModes />
-            <WriterMaster />
-            <AnalyticsLink />
             <GateSettings />
           </>
         ) : null}

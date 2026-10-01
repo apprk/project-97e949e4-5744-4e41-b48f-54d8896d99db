@@ -80,6 +80,7 @@ function AuthPage() {
       toast.error("パスワードが違います");
       return;
     }
+    void supabase.rpc("set_my_pin", { _pin: value });
     const { data: settings } = await supabase.from("app_settings").select("password_skip_days").maybeSingle();
     rememberLogin(settings?.password_skip_days ?? 0);
     await refresh();
