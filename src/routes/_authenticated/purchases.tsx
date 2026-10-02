@@ -270,7 +270,7 @@ function PurchaseTable({
                 key={p.id}
                 p={p}
                 cols={cols}
-                fullDate={fullDate}
+                fullDate={!!fullDate}
                 onCancel={() => setEditing(null)}
                 onSave={async (patch) => {
                   if (await update(p.id, patch)) {
