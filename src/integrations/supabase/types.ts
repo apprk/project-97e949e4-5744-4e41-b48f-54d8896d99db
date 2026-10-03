@@ -329,6 +329,104 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_admin_fields: {
+        Row: {
+          estimate_no: string | null
+          inspection_no: string | null
+          purchase_id: string
+          updated_at: string
+          vendor_no: string | null
+        }
+        Insert: {
+          estimate_no?: string | null
+          inspection_no?: string | null
+          purchase_id: string
+          updated_at?: string
+          vendor_no?: string | null
+        }
+        Update: {
+          estimate_no?: string | null
+          inspection_no?: string | null
+          purchase_id?: string
+          updated_at?: string
+          vendor_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_admin_fields_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: true
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_attachments: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          photo_id: string | null
+          purchase_id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          photo_id?: string | null
+          purchase_id: string
+          storage_path: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          photo_id?: string | null
+          purchase_id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_attachments_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_attachments_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_suppliers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          vendor_no: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          vendor_no?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          vendor_no?: string
+        }
+        Relationships: []
+      }
       purchase_writers: {
         Row: {
           created_at: string
@@ -505,6 +603,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_perm: { Args: { _perm: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
