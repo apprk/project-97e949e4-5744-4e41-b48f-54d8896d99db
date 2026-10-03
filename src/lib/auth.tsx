@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { MODES, type ModeKey } from "@/lib/modes";
+import { ALL_PERMS, MODES, type ModeKey } from "@/lib/modes";
 
 export type Profile = { id: string; name: string; slug: string; workplace?: string | null };
 
@@ -12,6 +12,8 @@ type AuthState = {
   isAdmin: boolean;
   /** このアカウントが利用できるモード（管理者は全モード） */
   modes: ModeKey[];
+  /** 細かい権限（"purchases.entry" など）。管理者は常に true */
+  can: (perm: string) => boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [modes, setModes] = useState<ModeKey[]>([]);
+  const [perms, setPerms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = async (uid: string | undefined) => {
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setIsAdmin(false);
       setModes([]);
+      setPerms([]);
       return;
     }
     const [{ data: p }, { data: roles }, { data: m }] = await Promise.all([
@@ -67,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const admin = !!roles?.some((r) => r.role === "admin");
     setProfile((p as Profile) ?? null);
     setIsAdmin(admin);
-    setModes(admin ? MODES.map((x) => x.key) : ((m ?? []).map((x) => x.mode) as ModeKey[]));
+    const granted = (m ?? []).map((x) => x.mode);
+    setPerms(admin ? ALL_PERMS : granted);
+    setModes(admin ? MODES.map((x) => x.key) : (granted.filter((g) => MODES.some((x) => x.key === g)) as ModeKey[]));
   };
 
   useEffect(() => {
@@ -91,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     isAdmin,
     modes,
+    can: (perm) => isAdmin || perms.includes(perm),
     refresh: async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
