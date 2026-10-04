@@ -384,7 +384,6 @@ function PurchaseTable({
                 p={p}
                 cols={cols}
                 fullDate={!!fullDate}
-                renderOps={(saveBtns) => saveBtns}
                 onCancel={() => setEditing(null)}
                 onSave={async (patch) => {
                   if (await update(p.id, patch)) {
@@ -534,7 +533,9 @@ function InlineAdminCell({
   p,
   k,
   onSave,
+  suppliers,
 }: {
+  suppliers: Supplier[];
   p: Purchase;
   k: "delivered_on" | "amount" | "supplier";
   onSave: (patch: Partial<Purchase>) => Promise<boolean>;
@@ -555,6 +556,9 @@ function InlineAdminCell({
       void onSave({ supplier: val.trim() || null });
     }
   };
+  if (k === "supplier") {
+    return <SupplierInput value={v} onChange={setV} onCommit={commit} suppliers={suppliers} />;
+  }
   return (
     <Input
       className={`h-9 min-w-0 px-1.5 text-sm ${k === "amount" ? "text-right" : ""}`}
@@ -572,6 +576,24 @@ function InlineAdminCell({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setV(initial);
       }}
+    />
+  );
+}
+
+/** 見積書（3桁までの数字、管理者のみ） */
+function EstimateCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  return (
+    <Input
+      className="h-9 w-12 min-w-0 px-1 text-center text-sm"
+      inputMode="numeric"
+      maxLength={3}
+      aria-label="見積書"
+      value={v}
+      onChange={(e) => setV(e.target.value.replace(/\D/g, "").slice(0, 3))}
+      onBlur={() => v !== value && onSave(v)}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
     />
   );
 }
@@ -606,7 +628,12 @@ function EditRow({
     <tr className="bg-accent/30">
       {cols.map((k) => (
         <td key={k} className="border-b border-r border-border p-1 align-top">
-          {COPYABLE.has(k) ? (
+          {k === "ops" ? (
+            <div className="whitespace-nowrap">
+              <Button size="sm" className="h-8" onClick={save}>保存</Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>取消</Button>
+            </div>
+          ) : COPYABLE.has(k) ? (
             <Input
               className="h-9 min-w-0 px-1.5 text-sm"
               inputMode={k === "quantity" ? "decimal" : undefined}
@@ -622,10 +649,6 @@ function EditRow({
           )}
         </td>
       ))}
-      <td className="border-b border-border p-1 whitespace-nowrap">
-        <Button size="sm" className="h-8" onClick={save}>保存</Button>
-        <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>取消</Button>
-      </td>
     </tr>
   );
 }
@@ -701,12 +724,14 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 function EntryView({
   writers,
+  suppliers,
   clip,
   onBulkCopy,
   initialPaste,
   onConsumePaste,
 }: {
   writers: Writer[];
+  suppliers: Supplier[];
   clip: Clip | null;
   onBulkCopy: (p: Purchase) => void;
   initialPaste: Clip | null;
@@ -725,6 +750,8 @@ function EntryView({
       : blank,
   );
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingAttach[]>([]);
+  const [q, setQ] = useState("");
   const itemRef = useRef<HTMLInputElement>(null);
   const writerRef = useRef<HTMLInputElement>(null);
 
@@ -732,7 +759,8 @@ function EntryView({
     if (initialPaste) onConsumePaste();
   }, []);
 
-  const cols: ColKey[] = isAdmin ? ["written_on", ...BASIC, ...ADMIN_TAIL] : ["written_on", ...BASIC];
+  // 一般：発注先まで表示（変更不可）。管理者：全列
+  const cols: ColKey[] = isAdmin ? ["written_on", ...BASIC, ...midCols(true), ...TAIL] : ["written_on", ...BASIC, "ops", "supplier"];
 
   const load = useCallback(async () => {
     const start = `${ym.y}-${pad(ym.m)}-01`;
@@ -779,7 +807,7 @@ function EntryView({
     }
     setBusy(true);
     const q = draft.quantity.trim() === "" ? null : Number(draft.quantity);
-    const { error } = await supabase.from("purchases").insert({
+    const { data: ins, error } = await supabase.from("purchases").insert({
       user_id: session.user.id,
       writer: writer.trim(),
       item_name: draft.item_name.trim(),
@@ -787,12 +815,15 @@ function EntryView({
       note: draft.note.trim() || null,
       quantity: q != null && Number.isFinite(q) ? q : null,
       unit: draft.unit.trim() || null,
-    });
-    setBusy(false);
-    if (error) {
+    }).select("id").single();
+    if (error || !ins) {
+      setBusy(false);
       toast.error("依頼できませんでした");
       return;
     }
+    if (pending.length) await saveAttachments(ins.id, session.user.id, pending);
+    setPending([]);
+    setBusy(false);
     toast.success("購入依頼しました");
     setDraft(blank);
     if (!isCurrent) setYm({ y: now.getFullYear(), m: now.getMonth() + 1 });
@@ -809,15 +840,22 @@ function EntryView({
   const footer = (
     <tr className="bg-primary/5">
       <td className="border-r border-border px-2 text-xs text-muted-foreground">新規</td>
+      <td className="border-r border-border" />
       <td className="min-w-24 border-r border-border p-1">
         <WriterInput value={writer} onChange={setWriter} writers={writers} inputRef={writerRef} onEnter={() => itemRef.current?.focus()} />
       </td>
       <td className="border-r border-border p-1"><Input ref={itemRef} className="h-10 min-w-0 px-1.5 text-sm" placeholder="品名" value={draft.item_name} onChange={d("item_name")} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="型式" value={draft.model} onChange={d("model")} onKeyDown={enter} /></td>
-      <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="備考" value={draft.note} onChange={d("note")} onKeyDown={enter} /></td>
+      <td className="border-r border-border p-1">
+        <div className="flex items-center gap-0.5">
+          <Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="備考" value={draft.note} onChange={d("note")} onKeyDown={enter} />
+          <AttachPicker count={pending.length} onPick={(items) => setPending((x) => [...x, ...items])} />
+        </div>
+        <PendingThumbs items={pending} onRemove={(k) => setPending((x) => x.filter((i) => i.key !== k))} />
+      </td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-right text-sm" inputMode="decimal" placeholder="数量" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value.replace(/[^\d.]/g, "") })} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="単位" value={draft.unit} onChange={d("unit")} onKeyDown={enter} /></td>
-      <td colSpan={cols.length - 7 + 1} className="p-1">
+      <td colSpan={cols.length - 8} className="p-1">
         <div className="flex items-center gap-1">
           <Button className="h-10" disabled={busy} onClick={submit}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} 購入依頼
@@ -848,12 +886,22 @@ function EntryView({
         <h2 className="min-w-40 text-center text-lg font-bold">{ym.y}年{ym.m}月 物品購入</h2>
         <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => move(1)}><ChevronRight className="size-5" /></Button>
         {!isCurrent ? <Button variant="ghost" size="sm" onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() + 1 })}>今月</Button> : null}
+        <form
+          className="ml-auto flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (q.trim()) googleSearch(q.trim());
+          }}
+        >
+          <Input className="h-9 w-40 bg-card text-sm sm:w-56" placeholder="Google検索" aria-label="Google検索" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Button type="submit" size="icon" variant="outline" className="size-9 bg-card" aria-label="検索" disabled={!q.trim()}><Search className="size-4" /></Button>
+        </form>
       </div>
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
         <>
-          <PurchaseTable rows={rows} cols={cols} reload={load} footer={footer} onBulkCopy={onBulkCopy} />
+          <PurchaseTable rows={rows} cols={cols} reload={load} footer={footer} onBulkCopy={onBulkCopy} suppliers={suppliers} />
           {rows.length === 0 ? <p className="mt-2 text-xs text-muted-foreground">この月の依頼はまだありません。一番下の行に入力してください。</p> : null}
           <p className="mt-2 text-xs text-muted-foreground">記載者・品名・型式・備考・数量・単位はタップするとコピーできます。</p>
         </>
@@ -864,9 +912,9 @@ function EntryView({
 
 /* ---------------- 履歴 ---------------- */
 
-const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...ADMIN_TAIL];
-
-function HistoryView({ clip, onBulkCopy, onPaste }: { clip: Clip | null; onBulkCopy: (p: Purchase) => void; onPaste: () => void }) {
+function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supplier[]; clip: Clip | null; onBulkCopy: (p: Purchase) => void; onPaste: () => void }) {
+  const { isAdmin } = useAuth();
+  const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(isAdmin), ...TAIL];
   const [rows, setRows] = useState<Purchase[] | null>(null);
   const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" };
   const [f, setF] = useState(empty);
@@ -947,7 +995,7 @@ function HistoryView({ clip, onBulkCopy, onPaste }: { clip: Clip | null; onBulkC
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <PurchaseTable rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} />
+        <PurchaseTable rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} suppliers={suppliers} />
       )}
     </main>
   );
