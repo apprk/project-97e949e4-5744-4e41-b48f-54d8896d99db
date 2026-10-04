@@ -20,7 +20,9 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
-import { AnalyticsLink, WriterMaster } from "@/components/AdminSettings";
+import { AnalyticsLink, SupplierMaster, WriterMaster, type Supplier } from "@/components/AdminSettings";
+import { AttachPicker, PendingThumbs, RowAttachments, SupplierInput, saveAttachments, type Attachment, type PendingAttach } from "@/components/PurchaseExtras";
+import { InspectionView } from "@/components/InspectionView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,7 +65,7 @@ const SELECT =
 
 type ColKey =
   | "written_on" | "workplace" | "writer" | "item_name" | "model" | "note" | "quantity" | "unit"
-  | "status" | "lead" | "delivered_on" | "amount" | "subtotal" | "supplier";
+  | "status" | "lead" | "delivered_on" | "amount" | "subtotal" | "supplier" | "estimate" | "ops";
 
 type Col = { label: string; w: string; text: (p: Purchase, full?: boolean) => string; align?: "right" };
 
@@ -90,6 +92,8 @@ const COLS: Record<ColKey, Col> = {
   amount: { label: "単価", w: "w-28", text: (p) => fmtYen(p.amount), align: "right" },
   subtotal: { label: "小計", w: "w-24", text: (p) => fmtYen(subtotal(p)), align: "right" },
   supplier: { label: "発注先", w: "w-36", text: (p) => p.supplier ?? "" },
+  estimate: { label: "見積書", w: "w-14", text: () => "" },
+  ops: { label: "操作", w: "", text: () => "" },
 };
 
 /** ワンクリックコピー・一括コピーの対象（6項目） */
@@ -100,8 +104,10 @@ const COPYABLE = new Set<ColKey>(COPY_KEYS);
 /** 管理者が一覧上で直接入力できる項目 */
 const ADMIN_INLINE = new Set<ColKey>(["delivered_on", "amount", "supplier"]);
 
-const ADMIN_TAIL: ColKey[] = ["lead", "delivered_on", "amount", "subtotal", "supplier"];
-const BASIC: ColKey[] = ["writer", "item_name", "model", "note", "quantity", "unit", "status"];
+/** 列順：状態→記載者→品名→型式→備考→数量→単位→見積書(管理者)→操作→発注先→目安納期→納品日→単価→小計 */
+const BASIC: ColKey[] = ["status", "writer", "item_name", "model", "note", "quantity", "unit"];
+const TAIL: ColKey[] = ["supplier", "lead", "delivered_on", "amount", "subtotal"];
+const midCols = (admin: boolean): ColKey[] => (admin ? ["estimate", "ops"] : ["ops"]);
 
 const googleSearch = (q: string) =>
   window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, "_blank", "noopener,noreferrer");
@@ -116,9 +122,20 @@ const clipFrom = (p: Purchase): Clip => ({
 });
 
 function PurchasesPage() {
-  const { isAdmin } = useAuth();
-  const [tab, setTab] = useState<"entry" | "history" | "settings">("entry");
+  const { isAdmin, can } = useAuth();
+  const allTabs = [
+    ...(can("purchases.entry") ? (["entry"] as const) : []),
+    ...(can("purchases.history") ? (["history"] as const) : []),
+    ...(isAdmin ? (["inspection", "settings"] as const) : []),
+  ];
+  const [tab, setTab] = useState<"entry" | "history" | "inspection" | "settings">(allTabs[0] ?? "entry");
   const [writers, setWriters] = useState<Writer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const loadSuppliers = useCallback(() => {
+    if (!isAdmin) return;
+    void supabase.from("purchase_suppliers").select("id,name,vendor_no").order("name").then(({ data }) => setSuppliers((data as Supplier[]) ?? []));
+  }, [isAdmin]);
+  useEffect(() => loadSuppliers(), [loadSuppliers]);
   // 一括コピー（アプリ内専用。記入・履歴の間で共有）
   const [clip, setClip] = useState<Clip | null>(null);
   const [pendingPaste, setPendingPaste] = useState<Clip | null>(null);
@@ -137,8 +154,8 @@ function PurchasesPage() {
     toast.success("一括コピーしました（一括ペーストで記入欄へ入ります）", { duration: 1500 });
   };
 
-  const tabs = isAdmin ? (["entry", "history", "settings"] as const) : (["entry", "history"] as const);
-  const tabLabel = { entry: "記入", history: "履歴", settings: "設定" };
+  const tabs = allTabs;
+  const tabLabel = { entry: "記入", history: "履歴", inspection: "発注検収", settings: "設定" };
 
   return (
     <div className="min-h-screen bg-background">
@@ -151,6 +168,7 @@ function PurchasesPage() {
               type="button"
               onClick={() => {
                 if (t === "settings") loadWriters();
+                else loadSuppliers();
                 setTab(t);
               }}
               className={`rounded-lg px-5 py-2 text-sm font-bold ${tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
@@ -160,9 +178,12 @@ function PurchasesPage() {
           ))}
         </div>
       </div>
-      {tab === "entry" ? (
+      {tabs.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground">利用できる機能がありません。管理者にお問い合わせください。</p>
+      ) : !tabs.includes(tab as never) ? null : tab === "entry" ? (
         <EntryView
           writers={writers}
+          suppliers={suppliers}
           clip={clip}
           onBulkCopy={bulkCopy}
           initialPaste={pendingPaste}
@@ -170,6 +191,7 @@ function PurchasesPage() {
         />
       ) : tab === "history" ? (
         <HistoryView
+          suppliers={suppliers}
           clip={clip}
           onBulkCopy={bulkCopy}
           onPaste={() => {
@@ -178,9 +200,12 @@ function PurchasesPage() {
             setTab("entry");
           }}
         />
+      ) : tab === "inspection" && isAdmin ? (
+        <InspectionView suppliers={suppliers} />
       ) : isAdmin ? (
         <main className="mx-auto max-w-md space-y-6 px-4 pb-24 pt-5">
           <WriterMaster />
+          <SupplierMaster />
           <AnalyticsLink />
         </main>
       ) : null}
@@ -199,7 +224,9 @@ function PurchaseTable({
   onSort,
   fullDate,
   onBulkCopy,
+  suppliers,
 }: {
+  suppliers: Supplier[];
   rows: Purchase[];
   cols: ColKey[];
   footer?: React.ReactNode;
@@ -211,6 +238,33 @@ function PurchaseTable({
 }) {
   const { isAdmin, session } = useAuth();
   const [editing, setEditing] = useState<string | null>(null);
+  const [estimates, setEstimates] = useState<Record<string, string>>({});
+  const [atts, setAtts] = useState<Record<string, Attachment[]>>({});
+  const idsKey = rows.map((r) => r.id).join(",");
+  const loadExtras = useCallback(async () => {
+    const ids = rows.map((r) => r.id);
+    if (!ids.length) { setAtts({}); setEstimates({}); return; }
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+    const a: Record<string, Attachment[]> = {};
+    const e: Record<string, string> = {};
+    await Promise.all(chunks.map(async (c) => {
+      const [{ data: at }, adm] = await Promise.all([
+        supabase.from("purchase_attachments").select("id,purchase_id,storage_path,photo_id").in("purchase_id", c).is("deleted_at", null).order("created_at"),
+        isAdmin ? supabase.from("purchase_admin_fields").select("purchase_id,estimate_no").in("purchase_id", c) : Promise.resolve({ data: [] as { purchase_id: string; estimate_no: string | null }[] }),
+      ]);
+      (at ?? []).forEach((x) => { (a[x.purchase_id] ??= []).push(x as Attachment); });
+      (adm.data ?? []).forEach((x) => { if (x.estimate_no) e[x.purchase_id] = x.estimate_no; });
+    }));
+    setAtts(a);
+    setEstimates(e);
+  }, [idsKey, isAdmin]);
+  useEffect(() => { void loadExtras(); }, [loadExtras]);
+  const saveEstimate = async (id: string, v: string) => {
+    const { error } = await supabase.from("purchase_admin_fields").upsert({ purchase_id: id, estimate_no: v || null, updated_at: new Date().toISOString() });
+    if (error) { toast.error("保存に失敗しました"); return; }
+    setEstimates((m) => ({ ...m, [id]: v }));
+  };
 
   const update = async (id: string, patch: Partial<Purchase>) => {
     const { error } = await supabase.from("purchases").update(patch).eq("id", id);
@@ -243,81 +297,7 @@ function PurchaseTable({
     if (await copyText(toTsv(COPY_KEYS.map((k) => c[k])))) toast.success("Excel用に1行コピーしました", { duration: 1200 });
   };
 
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-max min-w-full border-collapse text-sm">
-        <thead className="sticky top-0 z-10 bg-secondary text-secondary-foreground">
-          <tr>
-            {cols.map((k) => (
-              <th key={k} className={`${COLS[k].w} border-b border-r border-border px-2 py-2 text-left text-xs font-bold whitespace-nowrap`}>
-                {onSort ? (
-                  <button type="button" className="inline-flex items-center gap-0.5" onClick={() => onSort(k)}>
-                    {COLS[k].label}
-                    {sort?.key === k ? sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : null}
-                  </button>
-                ) : (
-                  COLS[k].label
-                )}
-              </th>
-            ))}
-            <th className="border-b border-border px-2 py-2 text-left text-xs font-bold">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((p) =>
-            editing === p.id ? (
-              <EditRow
-                key={p.id}
-                p={p}
-                cols={cols}
-                fullDate={!!fullDate}
-                onCancel={() => setEditing(null)}
-                onSave={async (patch) => {
-                  if (await update(p.id, patch)) {
-                    setEditing(null);
-                    toast.success("修正しました");
-                  }
-                }}
-              />
-            ) : (
-              <tr key={p.id} className={p.status === "rejected" ? "text-muted-foreground" : ""}>
-                {cols.map((k) => {
-                  const t = COLS[k].text(p, fullDate);
-                  const strike = p.status === "rejected" && k !== "status" ? "line-through" : "";
-                  const right = COLS[k].align === "right" ? "text-right" : "";
-                  if (isAdmin && ADMIN_INLINE.has(k)) {
-                    return (
-                      <td key={k} className="border-b border-r border-border p-1 align-top">
-                        <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier"} onSave={(patch) => update(p.id, patch)} />
-                      </td>
-                    );
-                  }
-                  if (k === "status") {
-                    return (
-                      <td key={k} className="border-b border-r border-border px-2 py-2 align-top whitespace-nowrap">
-                        <StatusCell p={p} />
-                      </td>
-                    );
-                  }
-                  if (COPYABLE.has(k)) {
-                    return (
-                      <td
-                        key={k}
-                        title={t ? "クリックでコピー" : undefined}
-                        onClick={() => copyCell(t)}
-                        className={`cursor-copy border-b border-r border-border px-2 py-2 align-top whitespace-pre-wrap break-words hover:bg-accent/40 ${right} ${strike}`}
-                      >
-                        {t}
-                      </td>
-                    );
-                  }
-                  return (
-                    <td key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right} ${strike}`}>
-                      {t}
-                    </td>
-                  );
-                })}
-                <td className="border-b border-border px-1 py-1 whitespace-nowrap">
+  const ops = (p: Purchase) => (
                   <div className="flex items-center gap-1">
                     {isAdmin ? (
                       <>
@@ -375,7 +355,114 @@ function PurchaseTable({
                       <Copy className="size-4" />
                     </Button>
                   </div>
-                </td>
+  );
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
+      <table className="w-max min-w-full border-collapse text-sm">
+        <thead className="sticky top-0 z-10 bg-secondary text-secondary-foreground">
+          <tr>
+            {cols.map((k) => (
+              <th key={k} className={`${COLS[k].w} ${k === "estimate" || k === "ops" ? "bg-primary/10" : ""} border-b border-r border-border px-2 py-2 text-left text-xs font-bold whitespace-nowrap`}>
+                {onSort && k !== "ops" && k !== "estimate" ? (
+                  <button type="button" className="inline-flex items-center gap-0.5" onClick={() => onSort(k)}>
+                    {COLS[k].label}
+                    {sort?.key === k ? sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : null}
+                  </button>
+                ) : (
+                  COLS[k].label
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) =>
+            editing === p.id ? (
+              <EditRow
+                key={p.id}
+                p={p}
+                cols={cols}
+                fullDate={!!fullDate}
+                renderOps={(saveBtns) => saveBtns}
+                onCancel={() => setEditing(null)}
+                onSave={async (patch) => {
+                  if (await update(p.id, patch)) {
+                    setEditing(null);
+                    toast.success("修正しました");
+                  }
+                }}
+              />
+            ) : (
+              <tr key={p.id} className={p.status === "rejected" ? "text-muted-foreground" : ""}>
+                {cols.map((k) => {
+                  const t = COLS[k].text(p, fullDate);
+                  const strike = p.status === "rejected" && k !== "status" ? "line-through" : "";
+                  const right = COLS[k].align === "right" ? "text-right" : "";
+                  if (k === "ops") return <td key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{ops(p)}</td>;
+                  if (k === "estimate") {
+                    return (
+                      <td key={k} className="border-b border-r border-border p-1 align-top">
+                        <EstimateCell value={estimates[p.id] ?? ""} onSave={(v) => saveEstimate(p.id, v)} />
+                      </td>
+                    );
+                  }
+                  if (k === "note") {
+                    const mine = p.user_id === session?.user.id;
+                    return (
+                      <td key={k} className={`border-b border-r border-border px-1 py-1 align-top ${strike}`}>
+                        <div className="flex items-start gap-0.5">
+                          <span
+                            title={t ? "クリックでコピー" : undefined}
+                            onClick={() => copyCell(t)}
+                            className="min-h-8 flex-1 cursor-copy whitespace-pre-wrap break-words rounded px-1 py-1 hover:bg-accent/40"
+                          >
+                            {t}
+                          </span>
+                          <RowAttachments
+                            purchaseId={p.id}
+                            items={atts[p.id] ?? []}
+                            canAdd={isAdmin || (mine && p.status === "pending")}
+                            canRemove={isAdmin}
+                            uid={session?.user.id ?? ""}
+                            onChanged={() => void loadExtras()}
+                          />
+                        </div>
+                      </td>
+                    );
+                  }
+                  if (isAdmin && ADMIN_INLINE.has(k)) {
+                    return (
+                      <td key={k} className="border-b border-r border-border p-1 align-top">
+                        <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier"} suppliers={suppliers} onSave={(patch) => update(p.id, patch)} />
+                      </td>
+                    );
+                  }
+                  if (k === "status") {
+                    return (
+                      <td key={k} className="border-b border-r border-border px-2 py-2 align-top whitespace-nowrap">
+                        <StatusCell p={p} />
+                      </td>
+                    );
+                  }
+                  if (COPYABLE.has(k)) {
+                    return (
+                      <td
+                        key={k}
+                        title={t ? "クリックでコピー" : undefined}
+                        onClick={() => copyCell(t)}
+                        className={`cursor-copy border-b border-r border-border px-2 py-2 align-top whitespace-pre-wrap break-words hover:bg-accent/40 ${right} ${strike}`}
+                      >
+                        {t}
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right} ${strike}`}>
+                      {t}
+                    </td>
+                  );
+                })}
               </tr>
             ),
           )}
