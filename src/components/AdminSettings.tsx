@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { BarChart3, ShieldCheck, Trash2, Users, UserPen } from "lucide-react";
+import { BarChart3, Building2, ShieldCheck, Trash2, Users, UserPen } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export function GateSettings() {
   );
 }
 
-type Acc = { id: string; name: string; slug: string; pin: string | null; admin: boolean; modes: string[] };
+type Acc = { id: string; name: string; slug: string; workplace: string | null; pin: string | null; admin: boolean; modes: string[] };
 
 /** アカウント一覧：アカウント名（＝職場名）・ID・4桁パスワード・利用モード（管理者のみ） */
 export function AccountModes() {
@@ -72,7 +72,7 @@ export function AccountModes() {
   const [pinEdit, setPinEdit] = useState<Record<string, string>>({});
   const load = async () => {
     const [{ data: ps }, { data: roles }, { data: ms }, { data: pins }] = await Promise.all([
-      supabase.from("profiles").select("id,name,slug").is("disabled_at", null).order("created_at"),
+      supabase.from("profiles").select("id,name,slug,workplace").is("disabled_at", null).order("created_at"),
       supabase.from("user_roles").select("user_id,role"),
       supabase.from("account_modes").select("user_id,mode"),
       supabase.from("account_pins").select("user_id,pin"),
@@ -82,6 +82,7 @@ export function AccountModes() {
         id: p.id,
         name: p.name,
         slug: p.slug,
+        workplace: p.workplace,
         pin: pins?.find((x) => x.user_id === p.id)?.pin ?? null,
         admin: !!roles?.some((r) => r.user_id === p.id && r.role === "admin"),
         modes: (ms ?? []).filter((m) => m.user_id === p.id).map((m) => m.mode),
@@ -95,6 +96,14 @@ export function AccountModes() {
       ? await supabase.from("account_modes").insert({ user_id: a.id, mode })
       : await supabase.from("account_modes").delete().eq("user_id", a.id).eq("mode", mode);
     if (error) toast.error("変更に失敗しました");
+    void load();
+  };
+  const saveWorkplace = async (a: Acc, v: string) => {
+    const w = v.trim() || null;
+    if (w === a.workplace) return;
+    const { error } = await supabase.from("profiles").update({ workplace: w }).eq("id", a.id);
+    if (error) toast.error("変更に失敗しました");
+    else toast.success("職場名を変更しました（今後の登録から反映）");
     void load();
   };
   const savePin = async (a: Acc) => {
@@ -121,7 +130,7 @@ export function AccountModes() {
       <h2 className="flex items-center gap-2 text-base font-bold">
         <Users className="size-5 text-primary" /> アカウント一覧（管理者）
       </h2>
-      <p className="mt-1 text-xs text-muted-foreground">アカウント名がそのまま物品購入の「職場」になります。管理者はすべてのモードを利用できます。</p>
+      <p className="mt-1 text-xs text-muted-foreground">物品購入の「職場」には、ここで設定した職場名（空欄可）が記録されます。管理者はすべての機能を利用できます。</p>
       <ul className="mt-3 space-y-3">
         {(list ?? []).map((a) => (
           <li key={a.id} className="rounded-xl border border-border p-3">
@@ -135,6 +144,17 @@ export function AccountModes() {
                   <Trash2 className="size-4" /> 削除
                 </Button>
               ) : null}
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm">
+              <span className="shrink-0 text-muted-foreground">職場名：</span>
+              <Input
+                key={a.workplace ?? ""}
+                className="h-9"
+                placeholder="（空欄）"
+                defaultValue={a.workplace ?? ""}
+                onBlur={(e) => saveWorkplace(a, e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              />
             </div>
             <div className="mt-2 flex items-center gap-2 text-sm">
               <span className="shrink-0 text-muted-foreground">4桁パスワード：</span>
@@ -152,12 +172,24 @@ export function AccountModes() {
               )}
             </div>
             {!a.admin ? (
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+              <div className="mt-3 space-y-2">
                 {MODES.map((m) => (
-                  <label key={m.key} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={a.modes.includes(m.key)} onCheckedChange={(c) => toggle(a, m.key, !!c)} />
-                    {m.label}
-                  </label>
+                  <div key={m.key}>
+                    <label className="flex items-center gap-2 text-sm font-bold">
+                      <Checkbox checked={a.modes.includes(m.key)} onCheckedChange={(c) => toggle(a, m.key, !!c)} />
+                      {m.label}
+                    </label>
+                    {m.perms && a.modes.includes(m.key) ? (
+                      <div className="ml-7 mt-1 flex flex-wrap gap-x-4 gap-y-1.5">
+                        {m.perms.map((pm) => (
+                          <label key={pm.key} className="flex items-center gap-2 text-xs">
+                            <Checkbox checked={a.modes.includes(pm.key)} onCheckedChange={(c) => toggle(a, pm.key, !!c)} />
+                            {pm.label}
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ) : null}
@@ -234,6 +266,65 @@ export function AnalyticsLink() {
       <Button asChild variant="outline" className="mt-3 h-12 w-full bg-card">
         <Link to="/purchase-analytics">分析を開く</Link>
       </Button>
+    </section>
+  );
+}
+
+export type Supplier = { id: string; name: string; vendor_no: string };
+
+/** 発注先設定（発注先名と業者番号。管理者のみ） */
+export function SupplierMaster() {
+  const [list, setList] = useState<Supplier[]>([]);
+  const [name, setName] = useState("");
+  const [no, setNo] = useState("");
+  const [filter, setFilter] = useState("");
+  const load = async () => {
+    const { data } = await supabase.from("purchase_suppliers").select("id,name,vendor_no").order("name");
+    setList((data as Supplier[]) ?? []);
+  };
+  useEffect(() => { void load(); }, []);
+  const add = async () => {
+    if (!name.trim()) { toast.error("発注先名を入力してください"); return; }
+    const { error } = await supabase.from("purchase_suppliers").insert({ name: name.trim(), vendor_no: no.trim() });
+    if (error) { toast.error("追加に失敗しました（同じ名前が登録済みの可能性があります）"); return; }
+    setName(""); setNo(""); void load();
+  };
+  const upd = async (s: Supplier, patch: Partial<Supplier>) => {
+    const { error } = await supabase.from("purchase_suppliers").update(patch).eq("id", s.id);
+    if (error) toast.error("変更に失敗しました");
+    void load();
+  };
+  const del = async (s: Supplier) => {
+    if (!window.confirm(`「${s.name}」を削除しますか？`)) return;
+    await supabase.from("purchase_suppliers").delete().eq("id", s.id);
+    void load();
+  };
+  return (
+    <section className={card}>
+      <h2 className="flex items-center gap-2 text-base font-bold">
+        <Building2 className="size-5 text-primary" /> 発注先設定（管理者）
+      </h2>
+      <p className="mt-1 text-xs text-muted-foreground">発注先欄の候補と、発注検収の業者番号の自動入力に使います。</p>
+      <details className="mt-3 rounded-lg border border-border">
+        <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-bold">登録済みの発注先（{list.length}件）を表示</summary>
+        <div className="px-3 pb-3">
+          <Input className="mb-2 h-10" placeholder="一覧から探す" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <ul className="max-h-80 space-y-2 overflow-auto">
+            {list.filter((s) => !filter || s.name.includes(filter) || s.vendor_no.includes(filter)).map((s) => (
+              <li key={s.id} className="flex items-center gap-2">
+                <Input className="h-10" defaultValue={s.name} aria-label="発注先名" onBlur={(e) => e.target.value.trim() && e.target.value !== s.name && upd(s, { name: e.target.value.trim() })} />
+                <Input className="h-10 w-24 shrink-0" defaultValue={s.vendor_no} aria-label="業者番号" onBlur={(e) => e.target.value !== s.vendor_no && upd(s, { vendor_no: e.target.value.trim() })} />
+                <Button size="icon" variant="ghost" className="shrink-0 text-destructive" aria-label="削除" onClick={() => del(s)}><Trash2 className="size-4" /></Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+      <div className="mt-3 flex items-center gap-2">
+        <Input className="h-11" placeholder="発注先名" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input className="h-11 w-28 shrink-0" placeholder="業者番号" value={no} onChange={(e) => setNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+        <Button className="h-11 shrink-0" onClick={add}>追加</Button>
+      </div>
     </section>
   );
 }
