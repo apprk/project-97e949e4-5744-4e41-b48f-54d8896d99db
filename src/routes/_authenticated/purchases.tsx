@@ -564,7 +564,7 @@ function InlineAdminCell({
       className={`h-9 min-w-0 px-1.5 text-sm ${k === "amount" ? "text-right" : ""}`}
       type={k === "delivered_on" ? "date" : "text"}
       inputMode={k === "amount" ? "decimal" : undefined}
-      placeholder={k === "amount" ? "単価" : k === "supplier" ? "発注先" : undefined}
+      placeholder={k === "amount" ? "単価" : undefined}
       aria-label={COLS[k].label}
       value={v}
       onChange={(e) => {
