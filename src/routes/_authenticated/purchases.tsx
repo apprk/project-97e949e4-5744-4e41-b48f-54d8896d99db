@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
+import { TABLE_SCROLL } from "@/lib/purchases";
 import {
   STATUS,
   copyText,
@@ -853,6 +854,7 @@ function EntryView({
   const footer = (
     <tr className="bg-primary/5">
       <td className="border-r border-border px-2 text-xs text-muted-foreground">新規</td>
+      {isAdmin ? <td className="border-r border-border" /> : null}
       <td className="border-r border-border" />
       <td className="min-w-24 border-r border-border p-1">
         <WriterInput value={writer} onChange={setWriter} writers={writers} inputRef={writerRef} onEnter={() => itemRef.current?.focus()} />
@@ -868,7 +870,7 @@ function EntryView({
       </td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-right text-sm" inputMode="decimal" placeholder="数量" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value.replace(/[^\d.]/g, "") })} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="単位" value={draft.unit} onChange={d("unit")} onKeyDown={enter} /></td>
-      <td colSpan={cols.length - 8} className="p-1">
+      <td colSpan={cols.length - 8 - (isAdmin ? 1 : 0)} className="p-1">
         <div className="flex items-center gap-1">
           <Button className="h-10" disabled={busy} onClick={submit}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} 購入依頼
