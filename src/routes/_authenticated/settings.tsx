@@ -31,7 +31,7 @@ const SKIP_OPTIONS = [
 ];
 
 function SettingsPage() {
-  const { profile, isAdmin, can, session, signOut } = useAuth();
+  const { profile, can, session, signOut } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [skip, setSkip] = useState("0");
