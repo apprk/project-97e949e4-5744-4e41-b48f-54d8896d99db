@@ -60,7 +60,7 @@ export const listAccounts = createServerFn({ method: "POST" })
 export const getGateId = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: admin } = await context.supabase.rpc("is_admin");
+    const { data: admin } = await context.supabase.rpc("has_perm", { _perm: "gate" });
     if (!admin) throw new Error("Forbidden");
     const gate = await loadGate();
     return { id: gate.login_id };
@@ -70,7 +70,7 @@ export const updateGate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().trim().min(4).max(100), pass: z.string().min(6).max(200) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: admin } = await context.supabase.rpc("is_admin");
+    const { data: admin } = await context.supabase.rpc("has_perm", { _perm: "gate" });
     if (!admin) throw new Error("Forbidden");
     await loadGate();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
