@@ -65,7 +65,7 @@ const SELECT =
 
 type ColKey =
   | "written_on" | "workplace" | "writer" | "item_name" | "model" | "note" | "quantity" | "unit"
-  | "status" | "lead" | "delivered_on" | "amount" | "subtotal" | "supplier" | "estimate" | "ops";
+  | "status" | "lead" | "delivered_on" | "amount" | "subtotal" | "supplier" | "estimate" | "ops" | "tools";
 
 type Col = { label: string; w: string; text: (p: Purchase, full?: boolean) => string; align?: "right" };
 
@@ -94,6 +94,7 @@ const COLS: Record<ColKey, Col> = {
   supplier: { label: "発注先", w: "w-36", text: (p) => p.supplier ?? "" },
   estimate: { label: "見積書", w: "w-14", text: () => "" },
   ops: { label: "操作", w: "", text: () => "" },
+  tools: { label: "修正・コピー", w: "", text: () => "" },
 };
 
 /** ワンクリックコピー・一括コピーの対象（6項目） */
@@ -102,11 +103,13 @@ type CopyKey = (typeof COPY_KEYS)[number];
 type Clip = Record<CopyKey, string>;
 const COPYABLE = new Set<ColKey>(COPY_KEYS);
 /** 管理者が一覧上で直接入力できる項目 */
-const ADMIN_INLINE = new Set<ColKey>(["delivered_on", "amount", "supplier"]);
+const ADMIN_INLINE = new Set<ColKey>(["delivered_on", "amount", "supplier", "workplace"]);
 
-/** 列順：状態→記載者→品名→型式→備考→数量→単位→見積書(管理者)→操作→発注先→目安納期→納品日→単価→小計 */
+/** 列順（右端に修正・削除・コピー等の tools）：状態→記載者→品名→型式→備考→数量→単位→見積書(管理者)→操作→発注先→目安納期→納品日→単価→小計 */
 const BASIC: ColKey[] = ["status", "writer", "item_name", "model", "note", "quantity", "unit"];
 const TAIL: ColKey[] = ["supplier", "lead", "delivered_on", "amount", "subtotal"];
+/** 一般アカウントには発注先を表示しない */
+const tailCols = (admin: boolean): ColKey[] => (admin ? TAIL : TAIL.filter((k) => k !== "supplier"));
 const midCols = (admin: boolean): ColKey[] => (admin ? ["estimate", "ops"] : ["ops"]);
 
 const googleSearch = (q: string) =>
@@ -328,6 +331,10 @@ function PurchaseTable({
                         ✅ 確認済
                       </Button>
                     ) : null}
+                  </div>
+  );
+  const tools = (p: Purchase) => (
+                  <div className="flex items-center gap-1">
                     {isAdmin || (p.user_id === session?.user.id && p.status === "pending") ? (
                       <>
                         <Button size="icon" variant="ghost" className="size-8" aria-label="修正" title="修正" onClick={() => setEditing(p.id)}>
@@ -359,13 +366,13 @@ function PurchaseTable({
   );
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
+    <div className={TABLE_SCROLL}>
       <table className="w-max min-w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-secondary text-secondary-foreground">
           <tr>
             {cols.map((k) => (
-              <th key={k} className={`${COLS[k].w} ${k === "estimate" || k === "ops" ? "bg-primary/10" : ""} border-b border-r border-border px-2 py-2 text-left text-xs font-bold whitespace-nowrap`}>
-                {onSort && k !== "ops" && k !== "estimate" ? (
+              <th key={k} className={`${COLS[k].w} ${k === "estimate" || k === "ops" || k === "tools" ? "bg-primary/10" : ""} border-b border-r border-border px-2 py-2 text-left text-xs font-bold whitespace-nowrap`}>
+                {onSort && k !== "ops" && k !== "tools" && k !== "estimate" ? (
                   <button type="button" className="inline-flex items-center gap-0.5" onClick={() => onSort(k)}>
                     {COLS[k].label}
                     {sort?.key === k ? sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : null}
@@ -400,6 +407,7 @@ function PurchaseTable({
                   const strike = p.status === "rejected" && k !== "status" ? "line-through" : "";
                   const right = COLS[k].align === "right" ? "text-right" : "";
                   if (k === "ops") return <td key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{ops(p)}</td>;
+                  if (k === "tools") return <td key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{tools(p)}</td>;
                   if (k === "estimate") {
                     return (
                       <td key={k} className="border-b border-r border-border p-1 align-top">
@@ -434,7 +442,7 @@ function PurchaseTable({
                   if (isAdmin && ADMIN_INLINE.has(k)) {
                     return (
                       <td key={k} className="border-b border-r border-border p-1 align-top">
-                        <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier"} suppliers={suppliers} onSave={(patch) => update(p.id, patch)} />
+                        <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier" | "workplace"} suppliers={suppliers} onSave={(patch) => update(p.id, patch)} />
                       </td>
                     );
                   }
@@ -538,7 +546,7 @@ function InlineAdminCell({
 }: {
   suppliers: Supplier[];
   p: Purchase;
-  k: "delivered_on" | "amount" | "supplier";
+  k: "delivered_on" | "amount" | "supplier" | "workplace";
   onSave: (patch: Partial<Purchase>) => Promise<boolean>;
 }) {
   const initial = k === "amount" ? (p.amount == null ? "" : String(Number(p.amount))) : (p[k] ?? "");
@@ -553,6 +561,8 @@ function InlineAdminCell({
       void onSave({ amount: n });
     } else if (k === "delivered_on") {
       void onSave({ delivered_on: val || null });
+    } else if (k === "workplace") {
+      void onSave({ workplace: val.trim() || null });
     } else {
       void onSave({ supplier: val.trim() || null });
     }
@@ -565,7 +575,7 @@ function InlineAdminCell({
       className={`h-9 min-w-0 px-1.5 text-sm ${k === "amount" ? "text-right" : ""}`}
       type={k === "delivered_on" ? "date" : "text"}
       inputMode={k === "amount" ? "decimal" : undefined}
-      placeholder={k === "amount" ? "単価" : undefined}
+      placeholder={k === "amount" ? "単価" : k === "workplace" ? "職場" : undefined}
       aria-label={COLS[k].label}
       value={v}
       onChange={(e) => {
@@ -629,7 +639,7 @@ function EditRow({
     <tr className="bg-accent/30">
       {cols.map((k) => (
         <td key={k} className="border-b border-r border-border p-1 align-top">
-          {k === "ops" ? (
+          {k === "tools" ? (
             <div className="whitespace-nowrap">
               <Button size="sm" className="h-8" onClick={save}>保存</Button>
               <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>取消</Button>
@@ -761,7 +771,9 @@ function EntryView({
   }, []);
 
   // 一般：発注先まで表示（変更不可）。管理者：全列
-  const cols: ColKey[] = isAdmin ? ["written_on", ...BASIC, ...midCols(true), ...TAIL] : ["written_on", ...BASIC, "ops", "supplier"];
+  const cols: ColKey[] = isAdmin
+    ? ["written_on", "workplace", ...BASIC, ...midCols(true), ...TAIL, "tools"]
+    : ["written_on", ...BASIC, "ops", "tools"];
 
   const load = useCallback(async () => {
     const start = `${ym.y}-${pad(ym.m)}-01`;
@@ -915,7 +927,7 @@ function EntryView({
 
 function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supplier[]; clip: Clip | null; onBulkCopy: (p: Purchase) => void; onPaste: () => void }) {
   const { isAdmin } = useAuth();
-  const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(isAdmin), ...TAIL];
+  const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(isAdmin), ...tailCols(isAdmin), "tools"];
   const [rows, setRows] = useState<Purchase[] | null>(null);
   const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" };
   const [f, setF] = useState(empty);
@@ -976,7 +988,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
         {inp("writer", "記載者")}
         {inp("item", "品名")}
         {inp("model", "型式")}
-        {inp("supplier", "発注先")}
+        {isAdmin ? inp("supplier", "発注先") : null}
         <Input className="h-10 text-sm" type="date" aria-label="期間（開始）" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
         <Input className="h-10 text-sm" type="date" aria-label="期間（終了）" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
         <select className={selectCls} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} aria-label="状態">

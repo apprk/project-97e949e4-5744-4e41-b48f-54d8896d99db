@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
 export function AppHeader({ title, back = "/" }: { title: string; back?: string }) {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, can } = useAuth();
+  const showSettings = ["settings", "trash", "accounts.manage", "accounts.list", "gate"].some(can);
   const router = useRouter();
 
   return (
@@ -21,11 +22,11 @@ export function AppHeader({ title, back = "/" }: { title: string; back?: string 
         {profile ? (
           <span className="hidden text-[11px] opacity-90 sm:inline">{profile.name} - ログイン中</span>
         ) : null}
-        <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
+        {showSettings ? <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
           <Link to="/settings" aria-label="設定">
             <Settings className="size-5" />
           </Link>
-        </Button>
+        </Button> : null}
         {profile ? (
           <Button
             variant="ghost"
