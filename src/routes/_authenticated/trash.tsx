@@ -31,7 +31,8 @@ const KIND_LABEL: Record<Kind, string> = {
 };
 
 function TrashPage() {
-  const { isAdmin } = useAuth();
+  const { can } = useAuth();
+  const isAdmin = can("trash");
   const [items, setItems] = useState<Item[] | null>(null);
 
   const load = async () => {
@@ -91,7 +92,7 @@ function TrashPage() {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader title="ごみ箱" />
-        <p className="px-4 py-12 text-center text-sm text-muted-foreground">ごみ箱は管理者のみ利用できます。</p>
+        <p className="px-4 py-12 text-center text-sm text-muted-foreground">ごみ箱を利用する権限がありません。</p>
       </div>
     );
   }
