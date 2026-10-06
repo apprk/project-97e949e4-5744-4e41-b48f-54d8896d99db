@@ -126,7 +126,8 @@ function PurchasesPage() {
   const allTabs = [
     ...(can("purchases.entry") ? (["entry"] as const) : []),
     ...(can("purchases.history") ? (["history"] as const) : []),
-    ...(isAdmin ? (["inspection", "settings"] as const) : []),
+    ...(isAdmin ? (["inspection"] as const) : []),
+    ...(can("settings.writers") || can("settings.suppliers") || can("settings.analytics") ? (["settings"] as const) : []),
   ];
   const [tab, setTab] = useState<"entry" | "history" | "inspection" | "settings">(allTabs[0] ?? "entry");
   const [writers, setWriters] = useState<Writer[]>([]);
@@ -202,11 +203,11 @@ function PurchasesPage() {
         />
       ) : tab === "inspection" && isAdmin ? (
         <InspectionView suppliers={suppliers} />
-      ) : isAdmin ? (
+      ) : tab === "settings" ? (
         <main className="mx-auto max-w-md space-y-6 px-4 pb-24 pt-5">
-          <WriterMaster />
-          <SupplierMaster />
-          <AnalyticsLink />
+          {can("settings.writers") ? <WriterMaster /> : null}
+          {can("settings.suppliers") ? <SupplierMaster /> : null}
+          {can("settings.analytics") ? <AnalyticsLink /> : null}
         </main>
       ) : null}
     </div>

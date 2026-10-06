@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MODES } from "@/lib/modes";
+import { FEATURES, MODES } from "@/lib/modes";
+import { useAuth } from "@/lib/auth";
 import { getGateId, updateGate } from "@/lib/gate.functions";
 import { disableAccount, resetAccountPin } from "@/lib/accounts.functions";
 import type { Writer } from "@/lib/purchases";
@@ -44,7 +45,7 @@ export function GateSettings() {
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <ShieldCheck className="size-5 text-primary" /> 初期認証（管理者）
+        <ShieldCheck className="size-5 text-primary" /> 初期認証
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">新しい端末で最初に入力するID・PASSです。認証済みの端末はそのまま使えます。</p>
       <div className="mt-3 space-y-3">
@@ -66,6 +67,7 @@ type Acc = { id: string; name: string; slug: string; workplace: string | null; p
 
 /** アカウント一覧：アカウント名（＝職場名）・ID・4桁パスワード・利用モード（管理者のみ） */
 export function AccountModes() {
+  const { isAdmin } = useAuth();
   const disable = useServerFn(disableAccount);
   const resetPin = useServerFn(resetAccountPin);
   const [list, setList] = useState<Acc[] | null>(null);
@@ -128,7 +130,7 @@ export function AccountModes() {
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <Users className="size-5 text-primary" /> アカウント一覧（管理者）
+        <Users className="size-5 text-primary" /> アカウント一覧
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">物品購入の「職場」には、ここで設定した職場名（空欄可）が記録されます。管理者はすべての機能を利用できます。</p>
       <ul className="mt-3 space-y-3">
@@ -139,12 +141,15 @@ export function AccountModes() {
                 <div className="font-bold">{a.name}{a.admin ? <span className="ml-2 text-xs text-primary">管理者</span> : null}</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">ID：{a.slug}</div>
               </div>
-              {!a.admin ? (
+              {isAdmin && !a.admin ? (
                 <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(a)}>
                   <Trash2 className="size-4" /> 削除
                 </Button>
               ) : null}
             </div>
+            {!isAdmin ? (
+              <div className="mt-1 text-xs text-muted-foreground">職場名：{a.workplace ?? "（空欄）"}</div>
+            ) : (<>
             <div className="mt-2 flex items-center gap-2 text-sm">
               <span className="shrink-0 text-muted-foreground">職場名：</span>
               <Input
@@ -191,12 +196,22 @@ export function AccountModes() {
                     ) : null}
                   </div>
                 ))}
+                <div className="border-t border-border pt-2 text-xs font-bold text-muted-foreground">設定・その他の機能</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {FEATURES.map((f) => (
+                    <label key={f.key} className="flex items-center gap-2 text-xs">
+                      <Checkbox checked={a.modes.includes(f.key)} onCheckedChange={(c) => toggle(a, f.key, !!c)} />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
               </div>
             ) : null}
+            </>)}
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-muted-foreground">「未記録」は、次回そのアカウントでログインした時に表示されます。</p>
+      {isAdmin ? <p className="mt-2 text-xs text-muted-foreground">権限の変更は管理者のみ行えます。「未記録」は、次回そのアカウントでログインした時に表示されます。</p> : null}
     </section>
   );
 }
@@ -229,7 +244,7 @@ export function WriterMaster() {
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <UserPen className="size-5 text-primary" /> 記載者設定（管理者）
+        <UserPen className="size-5 text-primary" /> 記載者設定
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">物品購入の記載者欄で、ふりがなから候補が出ます。</p>
       <details className="mt-3 rounded-lg border border-border">
@@ -260,7 +275,7 @@ export function AnalyticsLink() {
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <BarChart3 className="size-5 text-primary" /> 物品購入 分析（管理者）
+        <BarChart3 className="size-5 text-primary" /> 物品購入 分析
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">発注先別の支払額・割合、金額推移を確認できます。</p>
       <Button asChild variant="outline" className="mt-3 h-12 w-full bg-card">
@@ -302,7 +317,7 @@ export function SupplierMaster() {
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <Building2 className="size-5 text-primary" /> 発注先設定（管理者）
+        <Building2 className="size-5 text-primary" /> 発注先設定
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">発注先欄の候補と、発注検収の業者番号の自動入力に使います。</p>
       <details className="mt-3 rounded-lg border border-border">
