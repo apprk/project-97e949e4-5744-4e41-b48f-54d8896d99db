@@ -8,6 +8,13 @@
       "when": 1790986893890,
       "tag": "0000_purchases_perms_inspection",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791245292318,
+      "tag": "0001_app_wide_perms_admin_blank_workplace",
+      "breakpoints": true
     }
   ]
 }
