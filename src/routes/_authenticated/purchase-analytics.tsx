@@ -9,7 +9,7 @@ import { fmtYen, subtotal } from "@/lib/purchases";
 
 export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   beforeLoad: async () => {
-    const { data } = await supabase.rpc("is_admin");
+    const { data } = await supabase.rpc("has_perm", { _perm: "settings.analytics" });
     if (!data) throw redirect({ to: "/" });
   },
   head: () => ({

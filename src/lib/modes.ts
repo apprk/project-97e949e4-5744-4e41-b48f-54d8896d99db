@@ -26,7 +26,23 @@ export const MODES: { key: ModeKey; to: string; label: string; icon: LucideIcon;
   { key: "equipment", to: "/equipment", label: "設備保全", icon: Wrench },
 ];
 
-export const ALL_PERMS: string[] = MODES.flatMap((m) => [m.key, ...(m.perms ?? []).map((p) => p.key)]);
+/**
+ * モード以外の機能・設定の権限（アカウントごとにON/OFF）。
+ * 新しい機能はここに1行追加すると、設定のアカウント一覧に自動で出る。
+ * 権限の変更自体は管理者のみ（account_modes の書き込みは管理者限定）。
+ */
+export const FEATURES: Perm[] = [
+  { key: "settings", label: "設定（パスワード変更・省略設定）" },
+  { key: "trash", label: "ごみ箱" },
+  { key: "accounts.manage", label: "アカウント管理（追加）" },
+  { key: "accounts.list", label: "アカウント一覧（閲覧）" },
+  { key: "gate", label: "初期認証の変更" },
+  { key: "settings.writers", label: "記載者設定" },
+  { key: "settings.suppliers", label: "発注先設定" },
+  { key: "settings.analytics", label: "物品購入 分析" },
+];
+
+export const ALL_PERMS: string[] = [...MODES.flatMap((m) => [m.key, ...(m.perms ?? []).map((p) => p.key)]), ...FEATURES.map((f) => f.key)];
 
 export const GATE_TOKEN_KEY = "sanjo.gate.token";
 export const getGateToken = () => (typeof window === "undefined" ? null : localStorage.getItem(GATE_TOKEN_KEY));

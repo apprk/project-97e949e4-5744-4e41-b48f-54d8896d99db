@@ -31,7 +31,7 @@ const SKIP_OPTIONS = [
 ];
 
 function SettingsPage() {
-  const { profile, isAdmin, session, signOut } = useAuth();
+  const { profile, can, session, signOut } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [skip, setSkip] = useState("0");
@@ -130,6 +130,7 @@ function SettingsPage() {
     <div className="min-h-screen bg-background">
       <AppHeader title="設定" />
       <main className="mx-auto max-w-md space-y-6 px-4 pb-24 pt-5">
+        {can("settings") ? (<>
         <section className="rounded-2xl border border-border bg-card p-4">
           <h2 className="flex items-center gap-2 text-base font-bold">
             <KeyRound className="size-5 text-primary" /> パスワード変更
@@ -201,11 +202,12 @@ function SettingsPage() {
             </div>
           )}
         </section>
+        </>) : null}
 
-        {isAdmin ? (
+        {can("trash") ? (
           <section className="rounded-2xl border border-border bg-card p-4">
             <h2 className="flex items-center gap-2 text-base font-bold">
-              <Trash2 className="size-5 text-primary" /> ごみ箱（管理者）
+              <Trash2 className="size-5 text-primary" /> ごみ箱
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">削除したデータの復元・完全削除ができます。</p>
             <Button asChild variant="outline" className="mt-3 h-12 w-full bg-card">
@@ -214,10 +216,10 @@ function SettingsPage() {
           </section>
         ) : null}
 
-        {isAdmin ? (
+        {can("accounts.manage") ? (
           <section className="rounded-2xl border border-border bg-card p-4">
             <h2 className="flex items-center gap-2 text-base font-bold">
-              <UserPlus className="size-5 text-primary" /> アカウント管理（管理者）
+              <UserPlus className="size-5 text-primary" /> アカウント管理
             </h2>
             <div className="mt-3 space-y-3">
               <div className="space-y-1.5">
@@ -251,11 +253,10 @@ function SettingsPage() {
           </section>
         ) : null}
 
-        {isAdmin ? (
-          <>
-            <AccountModes />
-            <GateSettings />
-          </>
+        {can("accounts.list") ? <AccountModes /> : null}
+        {can("gate") ? <GateSettings /> : null}
+        {!["settings", "trash", "accounts.manage", "accounts.list", "gate"].some(can) ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">利用できる設定がありません。管理者にお問い合わせください。</p>
         ) : null}
       </main>
     </div>

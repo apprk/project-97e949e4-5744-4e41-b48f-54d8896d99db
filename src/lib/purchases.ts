@@ -86,3 +86,6 @@ export async function copyText(text: string) {
 
 /** タブ区切り。空欄も位置を保持する（改行・タブは空白へ） */
 export const toTsv = (cells: string[]) => cells.map((c) => c.replace(/[\t\r\n]+/g, " ")).join("\t");
+
+/** 表の枠：画面の高さに収め、横スクロールバーを常に画面下側に表示する（見出しは上に固定） */
+export const TABLE_SCROLL = "max-h-[calc(100dvh-11rem)] overflow-auto overscroll-contain rounded-xl border border-border bg-card";
