@@ -1,4 +1,5 @@
 # Work
+- [ ] Diagnose and repair schedule Excel import, with per-stage counts and preservation checks for 2024-07-13 through 2026-11-30.
 - [x] Hide administrators from normal account selection; add hidden dedicated login.
 - [x] Add secure administrator password migration/change and server-enforced retention.
 - [x] Audit existing purchase requirements without rebuilding completed features.

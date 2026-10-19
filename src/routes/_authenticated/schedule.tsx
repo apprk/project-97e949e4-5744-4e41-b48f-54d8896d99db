@@ -23,8 +23,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { exportCsv, exportPdf, exportScheduleExcel, parseScheduleExcel, IMPORT_FILE_NAME } from "@/lib/exporters";
+import { exportCsv, exportPdf, exportScheduleExcel, inspectScheduleExcel, IMPORT_FILE_NAME } from "@/lib/exporters";
 import type { ImportedRow, ScheduleField } from "@/lib/exporters";
+import { importPlan, readAllPages } from "@/lib/schedule-import";
 import { isDefaultGray } from "@/lib/holidays";
 import { useAuth } from "@/lib/auth";
 
@@ -113,6 +114,8 @@ function SchedulePage() {
   const [importing, setImporting] = useState(false);
   const [range, setRange] = useState({ start: "", end: "" });
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [sheetReport, setSheetReport] = useState<Awaited<ReturnType<typeof inspectScheduleExcel>>["sheets"]>([]);
+  const [importReport, setImportReport] = useState("");
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [heights, setHeights] = useState<Record<string, number>>({});
   const importRef = useRef<HTMLInputElement>(null);
@@ -126,25 +129,30 @@ function SchedulePage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [{ data, error }, { data: mk }] = await Promise.all([
-      supabase
+    try {
+    const [data, mk] = await Promise.all([
+      readAllPages<Schedule>((from, to) => supabase
         .from("schedules")
         .select("id,entry_date,size,comment_category,operation_comment,repair_item,new_effort,personal_plan")
         .is("deleted_at", null)
-        .order("entry_date"),
-      supabase.from("schedule_day_marks").select("mark_date,gray"),
+        .order("entry_date").order("id").range(from, to)),
+      readAllPages<{ mark_date: string; gray: boolean }>((from, to) => supabase.from("schedule_day_marks").select("mark_date,gray").order("user_id").order("mark_date").range(from, to)),
     ]);
-    if (error) toast.error("読み込みに失敗しました");
-    setRows((data as Schedule[]) ?? []);
+    setRows(data);
     const map: Record<string, boolean> = {};
     (mk ?? []).forEach((m) => {
       map[m.mark_date as string] = m.gray as boolean;
     });
     setMarks(map);
+    return data;
+    } catch (error) {
+      toast.error(`読み込みに失敗しました：${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load().catch(() => {});
   }, [load]);
 
   const byDate = useMemo(() => {
@@ -324,7 +332,12 @@ function SchedulePage() {
       return;
     }
     try {
-      const parsed = await parseScheduleExcel(file);
+      const inspected = await inspectScheduleExcel(file);
+      setSheetReport(inspected.sheets);
+      setImportReport("");
+      const errors = inspected.sheets.flatMap(sheet => sheet.errors);
+      if (errors.length) throw new Error(errors.join("／"));
+      const parsed = inspected.rows;
       if (parsed.length === 0) {
         toast.error("読み込める行がありませんでした（diary22以降のシートが対象です）");
         return;
@@ -332,8 +345,8 @@ function SchedulePage() {
       const dates = parsed.map((r) => r.entry_date).sort();
       setRange({ start: dates[0]!, end: dates[dates.length - 1]! });
       setImportRows(parsed);
-    } catch {
-      toast.error("Excelの読み込みに失敗しました");
+    } catch (error) {
+      toast.error(`Excelの読み込みに失敗しました：${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -345,49 +358,53 @@ function SchedulePage() {
 
   const runImport = async () => {
     if (!importRows || !session) return;
-    if (range.start > range.end) {
+    if (!range.start || !range.end || range.start > range.end) {
       toast.error("開始日が終了日より後になっています");
       return;
     }
     setImporting(true);
     setProgress({ done: 0, total: targetRows.length });
-    const { data: fresh } = await supabase
-      .from("schedules")
-      .select("id,entry_date")
-      .is("deleted_at", null)
-      .gte("entry_date", range.start)
-      .lte("entry_date", range.end);
-    const idByDate: Record<string, string> = {};
-    (fresh ?? []).forEach((r) => {
-      if (!idByDate[r.entry_date as string]) idByDate[r.entry_date as string] = r.id as string;
-    });
-    let ok = 0;
-    const inserts: Record<string, unknown>[] = [];
-    for (const r of targetRows) {
-      const { entry_date, ...fields } = r;
-      const payload = Object.fromEntries(
-        Object.entries(fields).filter(([, v]) => v && String(v).trim() !== ""),
-      ) as Partial<Record<ScheduleField, string>>;
-      if (Object.keys(payload).length === 0) continue;
-      const id = idByDate[entry_date];
-      if (id) {
-        const { error } = await supabase.from("schedules").update(payload).eq("id", id);
-        if (!error) ok += 1;
-      } else {
-        inserts.push({ user_id: session.user.id, entry_date, ...payload });
+    let added = 0, updated = 0, skipped = 0, failures = 0;
+    try {
+      const fresh = await readAllPages<Schedule>((from, to) => supabase.from("schedules")
+        .select("id,entry_date,size,comment_category,operation_comment,repair_item,new_effort,personal_plan")
+        .is("deleted_at", null).gte("entry_date", range.start).lte("entry_date", range.end)
+        .order("entry_date").order("id").range(from, to));
+      const plan = importPlan(importRows, fresh, range.start, range.end);
+      skipped = plan.skipped;
+      setProgress({ done: skipped, total: plan.target });
+      const errors: string[] = [];
+      for (const action of plan.actions) {
+        const result = action.id
+          ? await supabase.from("schedules").update(action.fields).eq("id", action.id).select("id")
+          : await supabase.from("schedules").insert({ user_id: session.user.id, entry_date: action.date, ...action.fields }).select("id");
+        if (result.error || result.data?.length !== 1) {
+          failures += 1;
+          errors.push(`${action.date}：${result.error?.message ?? "保存された行を確認できません"}`);
+        } else if (action.id) updated += 1;
+        else added += 1;
+        setProgress(p => ({ ...p, done: p.done + 1 }));
       }
-      setProgress((p) => ({ ...p, done: p.done + 1 }));
+      const saved = await load();
+      const savedById = new Map(saved.map(row => [row.id, row]));
+      const savedByDate = new Map(saved.map(row => [row.entry_date, row]));
+      const mismatch = plan.actions.filter(action => {
+        const row = action.id ? savedById.get(action.id) : savedByDate.get(action.date);
+        return Object.entries(action.fields).some(([key, value]) => row?.[key as ScheduleField] !== value);
+      }).length;
+      const report = `対象 ${plan.target}件／新規 ${added}件／更新 ${updated}件／変更なし ${skipped}件／エラー ${failures}件／保存後不一致 ${mismatch}件${plan.duplicateExisting ? `／既存の同日重複 ${plan.duplicateExisting}件（削除せず維持）` : ""}${errors.length ? `\n${errors.slice(0, 10).join("\n")}` : ""}`;
+      setImportReport(report);
+      if (failures || mismatch) toast.error("反映できなかったデータがあります。結果を確認してください");
+      else {
+        toast.success(`${added + updated}件の保存と再読み込みを確認しました`);
+        setMonth(range.start.slice(0, 7));
+      }
+    } catch (error) {
+      setImportReport(`新規 ${added}件／更新 ${updated}件／変更なし ${skipped}件／エラー ${failures + 1}件\n${error instanceof Error ? error.message : String(error)}`);
+      toast.error("インポートが完了していません。結果を確認してください");
+    } finally {
+      setImporting(false);
     }
-    // 新規分はまとめて登録し、件数が多い年でも取りこぼさない
-    for (let i = 0; i < inserts.length; i += 100) {
-      const chunk = inserts.slice(i, i + 100);
-      const { error } = await supabase.from("schedules").insert(chunk as never);
-      if (!error) ok += chunk.length;
-    }
-    setImporting(false);
-    setImportRows(null);
-    toast.success(`${ok}件を反映しました`);
-    void load();
   };
 
   const days = daysOfMonth(month);
@@ -738,14 +755,17 @@ function SchedulePage() {
       </Dialog>
 
       {/* インポート確認 */}
-      <AlertDialog open={!!importRows} onOpenChange={(o) => !o && setImportRows(null)}>
-        <AlertDialogContent>
+      <AlertDialog open={!!importRows} onOpenChange={(o) => !o && !importing && setImportRows(null)}>
+        <AlertDialogContent className="max-h-[85vh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Excelの内容で上書きします</AlertDialogTitle>
             <AlertDialogDescription>
               読み込んだ入力は全部で{importRows?.length ?? 0}日分です。下の期間を指定すると、その範囲だけを反映します（範囲外の日付は変更しません）。Excelが空欄の項目も変更しません。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="text-xs text-muted-foreground space-y-1">
+            {sheetReport.map(sheet => <p key={sheet.name}>{sheet.name}：走査 {sheet.scanned}行／入力 {sheet.parsed}件／空欄 {sheet.blank}行／翌年など対象外 {sheet.outsideYear}行／エラー {sheet.errors.length}件</p>)}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs font-medium" htmlFor="imp-start">
@@ -776,8 +796,9 @@ function SchedulePage() {
             この期間の対象：{targetRows.length}日分
             {importing ? `／反映中 ${progress.done}/${progress.total}` : ""}
           </p>
+          {importReport ? <p role="status" className="whitespace-pre-wrap text-sm">{importReport}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={importing}>{importReport ? "閉じる" : "キャンセル"}</AlertDialogCancel>
             <AlertDialogAction
               disabled={importing}
               onClick={(e) => {

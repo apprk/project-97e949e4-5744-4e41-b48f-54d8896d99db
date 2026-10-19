@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
+- Schedule reads and import matching use stable paginated reads; Excel dates retain their raw year and imports verify returned writes and readback without deleting existing duplicate rows. Why: Data API limits and formatted date cells must not hide later years or create more duplicates.
 - Business modes are registered in `src/lib/modes.ts` (MODES); per-account access lives in `account_modes`, enforced in `_authenticated/route.tsx`. Why: new modes need one line, not new role types.
 - Device gate (初期認証) is verified server-side (`src/lib/gate.functions.ts`, `app_gate` table, server-only); a HMAC token is kept in localStorage. Why: iframe-safe and survives without re-entry.
 - Purchase protected fields/status are enforced by the `purchases_guard` DB trigger and delegated permissions; delivered_on set => status delivered. Why: UI can't bypass permissions.
