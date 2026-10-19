@@ -22,7 +22,7 @@ function PeriodDate({ label, value, onChange }: { label: string; value: string; 
     <span className="text-sm">{label}</span>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button variant="outline" className="w-full justify-start" aria-label={label}><CalendarIcon className="size-4" />{format(parseISO(value), "yyyy/MM/dd")}</Button></PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="z-[60] w-auto p-0" align="start">
         <Calendar mode="single" locale={ja} captionLayout="dropdown" startMonth={new Date(1900, 0)} endMonth={new Date(2100, 11)} selected={parseISO(value)} defaultMonth={parseISO(value)} onSelect={(date) => { if (date) { onChange(format(date, "yyyy-MM-dd")); setOpen(false); } }} className="pointer-events-auto p-3" />
       </PopoverContent>
     </Popover>
