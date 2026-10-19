@@ -57,6 +57,13 @@
       "when": 1792370788493,
       "tag": "0007_maintenance_records_and_history_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792386863479,
+      "tag": "0008_optimize_purchase_rows_and_import_dedup",
+      "breakpoints": true
     }
   ]
 }

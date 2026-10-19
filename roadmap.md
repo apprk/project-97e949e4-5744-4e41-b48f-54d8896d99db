@@ -17,3 +17,10 @@
 - [x] Normalize purchase searches/sorts and add history match navigation.
 - [x] Add permission-protected purchase Excel import and aligned CSV export.
 - [x] Verify rules with tests and check administrator/general-account flows on desktop/mobile.
+## 物品購入 Excel読込エラー調査・修正 + 分析の業者選択 (2026-10-19)
+- [x] 1. 2021年度読込の実態調査（DB件数・期間内件数・失敗有無）
+- [x] 2. 一覧・履歴取得エラーの原因特定（取得上限・ページネーション）
+- [x] 3. 読込処理を約1,500件安定対応に修正（分割・重複防止）
+- [x] 4. 読込の進行状況・結果表示を改善
+- [x] 5. 分析に業者別チェック選択を追加（全分析へ反映・小計集計維持）
+- [x] 6. 動作確認と最終報告（①〜⑧）

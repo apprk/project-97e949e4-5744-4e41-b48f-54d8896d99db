@@ -743,7 +743,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      import_purchases: { Args: { _rows: Json }; Returns: number }
+      import_purchases: { Args: { _rows: Json }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
       is_admin_account: { Args: { _id: string }; Returns: boolean }
       mark_purchase_checked: { Args: { _id: string }; Returns: undefined }

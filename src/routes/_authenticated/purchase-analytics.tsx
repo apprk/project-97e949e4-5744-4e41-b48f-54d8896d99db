@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPurchaseRows } from "@/lib/purchase-data";
@@ -41,6 +42,12 @@ function AnalyticsPage() {
   const [rows, setRows] = useState<Purchase[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+
+  const supplierName = (r: Purchase) => r.supplier?.trim() || "（未入力）";
+  const suppliers = useMemo(() => [...new Set((rows ?? []).map(supplierName))].sort((a, b) => a.localeCompare(b, "ja")), [rows]);
+  const toggleSupplier = (name: string) => setExcluded((prev) => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; });
 
   useEffect(() => {
     setRows(null);
@@ -53,7 +60,8 @@ function AnalyticsPage() {
     return () => { active = false; };
   }, [revision]);
 
-  const { bySupplier, total, trend, datedCount, pricedCount } = useMemo(() => aggregatePurchases(rows ?? [], from, to, unit), [rows, from, to, unit]);
+  const filtered = useMemo(() => (rows ?? []).filter((r) => !excluded.has(supplierName(r))), [rows, excluded]);
+  const { bySupplier, total, trend, datedCount, pricedCount } = useMemo(() => aggregatePurchases(filtered, from, to, unit), [filtered, from, to, unit]);
   const invalidPeriod = !!from && !!to && from > to;
   const emptyMessage = datedCount === 0 ? "対象データがありません。" : "対象期間の納品データはありますが、単価または数量が未入力のため集計できません。";
 
@@ -66,6 +74,7 @@ function AnalyticsPage() {
           <Input type="date" className="h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="開始日" />
           <span>〜</span>
           <Input type="date" className="h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="終了日" />
+          <Button size="sm" variant="outline" onClick={() => setSupplierOpen(true)}><Building2 className="size-4"/>業者{excluded.size ? `（${suppliers.length - excluded.size}/${suppliers.length}）` : ""}</Button>
           <span className="ml-auto text-sm">小計合計 <b className="text-lg">{fmtYen(total)}</b></span>
         </section>
 
@@ -133,6 +142,26 @@ function AnalyticsPage() {
           </>
         )}
       </main>
+      <Dialog open={supplierOpen} onOpenChange={setSupplierOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>分析対象の業者</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">チェックを外した業者は、すべての分析結果から除外されます。履歴データ自体は変更されません。</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setExcluded(new Set())}>すべて選択</Button>
+            <Button size="sm" variant="outline" onClick={() => setExcluded(new Set(suppliers))}>すべて解除</Button>
+          </div>
+          <ul className="divide-y divide-border">
+            {suppliers.map((name) => (
+              <li key={name}>
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+                  <input type="checkbox" className="size-5 accent-primary" checked={!excluded.has(name)} onChange={() => toggleSupplier(name)} aria-label={`${name}を分析対象に含める`} />
+                  <span className="break-words">{name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

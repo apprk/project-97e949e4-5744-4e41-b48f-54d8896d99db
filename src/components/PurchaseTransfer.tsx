@@ -16,24 +16,35 @@ export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
   const [file,setFile]=useState<File | null>(null);
   const [preview,setPreview]=useState<ImportPurchase[] | null>(null);
   const [busy,setBusy]=useState(false);
+  const [progress,setProgress]=useState<{done:number;total:number}|null>(null);
+  const [result,setResult]=useState<string|null>(null);
   const validPeriod=() => { if(from && to && from>to) throw new Error("開始日は終了日以前にしてください。"); };
   const check = async () => {
     try { validPeriod(); if(!file) throw new Error("ファイルを選択してください。"); validatePurchaseFile(file.name);
-      setPreview(parsePurchaseWorkbook(await file.arrayBuffer(),from,to));
+      setResult(null); setPreview(parsePurchaseWorkbook(await file.arrayBuffer(),from,to));
     } catch(e) { setPreview(null); toast.error(e instanceof Error ? e.message : "読み込めませんでした"); }
   };
   const register = async () => {
     if(!preview?.length || busy) return;
-    setBusy(true); let count=0;
+    setBusy(true); setResult(null); setProgress({done:0,total:preview.length});
+    let inserted=0, skipped=0, done=0;
     try {
       for(let i=0;i<preview.length;i+=200) {
         const { data,error }=await supabase.rpc("import_purchases",{_rows: preview.slice(i,i+200)});
         if(error) throw error;
-        count+=Number(data);
+        const counts=data as {inserted?:number;skipped?:number}|null;
+        inserted+=Number(counts?.inserted ?? 0); skipped+=Number(counts?.skipped ?? 0);
+        done+=Math.min(200,preview.length-i); setProgress({done,total:preview.length});
       }
-      toast.success(`${count}件を登録しました`); setPreview(null); setFile(null); setOpen(false);
-    } catch { toast.error(`登録を停止しました（${count}件登録済み）。重複を避けるため、未登録分を期間指定してください。`); }
-    finally { setBusy(false); onImported(); }
+      toast.success(`読込完了：${inserted}件を登録${skipped?`、既登録の${skipped}件はスキップ`:""}しました`);
+      setResult(`完了：対象 ${preview.length}件 / 登録 ${inserted}件 / 既登録スキップ ${skipped}件`);
+      setPreview(null); setFile(null);
+    } catch(e) {
+      const detail=e instanceof Error && e.message ? `（${e.message}）` : "";
+      setResult(`途中で停止しました${detail}。登録 ${inserted}件 / 既登録スキップ ${skipped}件 / 処理済み ${done}件（全 ${preview.length}件）。再実行しても登録済みのデータは重複しません。`);
+      toast.error("登録が途中で停止しました");
+    }
+    finally { setBusy(false); setProgress(null); onImported(); }
   };
   const output = async () => {
     setBusy(true);
@@ -51,6 +62,8 @@ export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
       </div>
       <Input type="file" accept=".xlsx" aria-label="物品購入Excelファイル" disabled={busy} onChange={(e)=>{setFile(e.target.files?.[0] ?? null);setPreview(null);}}/>
       <Button variant="outline" onClick={check} disabled={busy || !file}>読込内容を確認</Button>
+      {progress ? <p className="text-sm" role="status">登録処理中… {progress.done} / {progress.total}件</p> : null}
+      {result ? <p className="rounded-md border border-border bg-muted p-2 text-sm" role="status">{result}</p> : null}
       {preview ? <div className="space-y-2 text-sm"><p className="break-all">{file?.name}</p><p>{from || "すべて"} ～ {to || "すべて"}：登録予定 {preview.length}件</p>
         <Button disabled={busy || !preview.length} onClick={register}>{busy ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4"/>} {preview.length}件を追加登録</Button></div> : null}
       <Button variant="outline" disabled={busy} onClick={output}><Download className="size-4"/> CSV出力</Button>
