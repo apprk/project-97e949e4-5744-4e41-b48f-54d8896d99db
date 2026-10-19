@@ -36,7 +36,7 @@ export function importPlan(source: ImportedRow[], existing: StoredSchedule[], st
       if (value?.trim() && value !== old?.[key]) fields[key] = value;
     }
     if (!Object.keys(fields).length) { skipped += 1; continue; }
-    actions.push({ date: row.entry_date, id: old?.id, fields });
+    actions.push({ date: row.entry_date, ...(old ? { id: old.id } : {}), fields });
   }
   return { actions, skipped, target: target.length, duplicateExisting };
 }
