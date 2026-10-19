@@ -1,0 +1,16 @@
+REVOKE ALL ON FUNCTION public.purchase_visible(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.purchase_visible(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.import_purchases(jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.import_purchases(jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.save_purchase_estimate(uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.save_purchase_estimate(uuid,text) TO authenticated;
+REVOKE ALL ON FUNCTION public.purchase_rows() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.purchase_rows() TO authenticated;
+REVOKE ALL ON FUNCTION public.mark_purchase_checked(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.mark_purchase_checked(uuid) TO authenticated;
+DROP POLICY IF EXISTS "roles insert self bootstrap" ON public.user_roles;
+CREATE POLICY "roles insert admin" ON public.user_roles FOR INSERT TO authenticated WITH CHECK(public.is_admin());
+CREATE POLICY "estimate permission" ON public.purchase_admin_fields FOR SELECT TO authenticated USING(public.has_perm('purchases') AND public.has_perm('purchases.estimate') AND public.purchase_visible(purchase_id));
+REVOKE SELECT ON public.purchase_admin_fields FROM authenticated;
+GRANT SELECT(purchase_id,estimate_no,updated_at) ON public.purchase_admin_fields TO authenticated;
+CREATE POLICY "attachments module required" ON public.purchase_attachments AS RESTRICTIVE FOR ALL TO authenticated USING(public.has_perm('purchases')) WITH CHECK(public.has_perm('purchases'));
