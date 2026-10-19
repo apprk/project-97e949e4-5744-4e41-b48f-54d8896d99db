@@ -6,9 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPurchaseRows } from "@/lib/purchase-data";
+import {useServerFn} from "@tanstack/react-start";
+import {exportPurchaseCsv} from "@/lib/purchase-export.functions";
 import { inPurchasePeriod, parsePurchaseWorkbook, purchaseCsv, validatePurchaseFile, type ImportPurchase } from "@/lib/purchase-transfer";
 
 export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
+  const exportCsv=useServerFn(exportPurchaseCsv);
   const [open,setOpen]=useState(false);
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
   const [file,setFile]=useState<File | null>(null);
@@ -35,9 +38,8 @@ export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
   };
   const output = async () => {
     setBusy(true);
-    try { validPeriod(); const rows=(await fetchPurchaseRows()).filter((r)=>inPurchasePeriod(r.written_on,from,to));
-      const data=rows.map((r)=>({...r,model:r.model ?? "",note:r.note ?? "",unit:r.unit ?? "",supplier:r.supplier ?? ""}));
-      const url=URL.createObjectURL(new Blob([purchaseCsv(data)],{type:"text/csv;charset=utf-8"}));
+    try { validPeriod(); const {csv}=await exportCsv({data:{from,to}});
+      const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
       const a=document.createElement("a"); a.href=url;a.download="物品購入.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     } catch(e) { toast.error(e instanceof Error ? e.message : "出力できませんでした"); } finally {setBusy(false);}
   };
