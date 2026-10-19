@@ -4,11 +4,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+import { PurchaseScroll } from "@/components/PurchaseScroll";
+import { fetchPurchaseRows } from "@/lib/purchase-data";
 import { SupplierInput } from "@/components/PurchaseExtras";
 import type { Supplier } from "@/components/AdminSettings";
 import { useAuth } from "@/lib/auth";
-import { copyText, fmtNum, fmtYMD, fmtYen, type Purchase } from "@/lib/purchases";
+import { copyText, fmtNum, fmtYMD, fmtYen, comparePurchaseText, inspectionMatches, type Purchase } from "@/lib/purchases";
 
 /**
  * 発注検収（管理者のみ）。物品購入データ（承認済）をそのまま扱い、
@@ -20,6 +21,7 @@ type Draft = Record<K, string>;
 
 const COLS: { k: K; label: string; w: string; right?: boolean; type?: string }[] = [
   { k: "written_on", label: "記載日", w: "w-32", type: "date" },
+  { k: "inspection_no", label: "検収番号", w: "w-24" },
   { k: "item_name", label: "品名", w: "w-40" },
   { k: "model", label: "型式", w: "w-36" },
   { k: "quantity", label: "数量", w: "w-16", right: true },
@@ -27,7 +29,6 @@ const COLS: { k: K; label: string; w: string; right?: boolean; type?: string }[]
   { k: "supplier", label: "発注先", w: "w-40" },
   { k: "delivered_on", label: "納品日", w: "w-32", type: "date" },
   { k: "amount", label: "単価", w: "w-24", right: true },
-  { k: "inspection_no", label: "検収番号", w: "w-24" },
   { k: "vendor_no", label: "業者番号", w: "w-24" },
 ];
 
@@ -48,9 +49,10 @@ const num = (s: string) => {
 };
 
 export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
-  const { session } = useAuth();
+  const { session, isAdmin } = useAuth();
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [withDelivered, setWithDelivered] = useState(false);
+  const [withDelivered, setWithDelivered] = useState(true);
+  const [numberFilter,setNumberFilter]=useState("all");
   const [sort, setSort] = useState<{ k: K; dir: 1 | -1 }>({ k: "written_on", dir: 1 });
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState<Draft>(blank());
@@ -58,26 +60,9 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const statuses = withDelivered ? ["approved", "delivered"] : ["approved"];
-    const { data } = await supabase
-      .from("purchases")
-      .select("id,user_id,workplace,written_on,writer,item_name,model,note,quantity,unit,status,supplier,delivered_on,amount,check_reason,created_at")
-      .is("deleted_at", null)
-      .in("status", statuses)
-      .order("written_on")
-      .order("created_at")
-      .limit(5000);
-    const list = (data as Purchase[]) ?? [];
-    const adm: Record<string, { inspection_no: string | null; vendor_no: string | null }> = {};
-    for (let i = 0; i < list.length; i += 200) {
-      const { data: a } = await supabase
-        .from("purchase_admin_fields")
-        .select("purchase_id,inspection_no,vendor_no")
-        .in("purchase_id", list.slice(i, i + 200).map((r) => r.id));
-      (a ?? []).forEach((x) => (adm[x.purchase_id] = x));
-    }
-    setRows(list.map((r) => ({ ...r, inspection_no: adm[r.id]?.inspection_no ?? "", vendor_no: adm[r.id]?.vendor_no ?? "" })));
-  }, [withDelivered]);
+    try { const list=await fetchPurchaseRows(); setRows(list.map((r)=>({...r,inspection_no:r.inspection_no ?? "",vendor_no:r.vendor_no ?? ""}))); }
+    catch { toast.error("発注検収を読み込めませんでした"); setRows([]); }
+  }, []);
   useEffect(() => { void load(); }, [load]);
 
   const view = useMemo(() => {
@@ -88,11 +73,11 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       if (sort.k === "written_on") return r.written_on + r.created_at;
       return String(r[sort.k] ?? "");
     };
-    return [...rows].sort((a, b) => {
+    return rows.filter((r)=>inspectionMatches(r.status,r.inspection_no,withDelivered,numberFilter)).sort((a, b) => {
       const x = v(a), y = v(b);
-      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "ja")) * sort.dir;
+      return (typeof x === "number" && typeof y === "number" ? x - y : comparePurchaseText(String(x),String(y))) * sort.dir;
     });
-  }, [rows, sort]);
+  }, [rows, sort, withDelivered, numberFilter]);
 
   const vendorOf = (name: string) => suppliers.find((s) => s.name === name.trim())?.vendor_no ?? "";
 
@@ -121,8 +106,9 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       if (error || !data) return false;
       pid = data.id;
     }
+    if (!pid) return false;
     const { error } = await supabase.from("purchase_admin_fields").upsert({
-      purchase_id: pid!,
+      purchase_id: pid,
       inspection_no: d.inspection_no.trim() || null,
       vendor_no: d.vendor_no.trim() || null,
       updated_at: new Date().toISOString(),
@@ -169,7 +155,7 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
             onChange={(v) => set({ ...d, supplier: v })}
             onCommit={(v) => {
               const no = vendorOf(v);
-              if (no) set({ ...d, supplier: v, vendor_no: no });
+              set({ ...d, supplier: v, vendor_no: no });
             }}
           />
         ) : (
@@ -192,14 +178,15 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
         <h2 className="text-lg font-bold">発注検収</h2>
         <span className="text-muted-foreground">🟢 承認済 {rows?.length ?? 0}件</span>
-        <label className="ml-auto flex items-center gap-2 text-xs">
-          <Checkbox checked={withDelivered} onCheckedChange={(c) => setWithDelivered(!!c)} /> 納品済も表示
-        </label>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <select aria-label="発注検収状態" className="h-10 rounded-md border border-input bg-background px-2" value={withDelivered ? "both" : "approved"} onChange={(e)=>setWithDelivered(e.target.value==="both")}><option value="approved">承認済のみ</option><option value="both">承認済＆納品済</option></select>
+          <select aria-label="検収番号の絞り込み" className="h-10 rounded-md border border-input bg-background px-2" value={numberFilter} onChange={(e)=>setNumberFilter(e.target.value)}><option value="all">記載済＆未記載</option><option value="numbered">記載済のみ</option><option value="missing">未記載のみ</option></select>
+        </div>
       </div>
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <PurchaseScroll>
           <table className="w-max min-w-full border-collapse text-sm">
             <thead className="bg-secondary text-secondary-foreground">
               <tr>
@@ -225,9 +212,10 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={r.id}>
+                  <tr key={r.id} data-inspection-row={r.id}>
                     {COLS.map((c) => {
                       const t = text(r, c.k);
+                    if (isAdmin && (c.k==="delivered_on" || c.k==="amount" || c.k==="inspection_no")) return <td key={c.k} className="border-b border-r border-border p-1"><InspectionInline row={r} field={c.k} onSaved={load}/></td>;
                       return (
                         <td
                           key={c.k}
@@ -240,29 +228,44 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
                       );
                     })}
                     <td className="border-b border-border px-1 py-1 whitespace-nowrap">
-                      <Button size="icon" variant="ghost" className="size-8" aria-label="修正" title="修正" onClick={() => { setEdit(toDraft(r)); setEditing(r.id); }}>
+                      <Button disabled={!isAdmin} size="icon" variant="ghost" className="size-8" aria-label="修正" title="修正" onClick={() => { setEdit(toDraft(r)); setEditing(r.id); }}>
                         <Pencil className="size-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="削除" title="削除" onClick={() => remove(r)}>
+                      <Button disabled={!isAdmin} size="icon" variant="ghost" className="size-8 text-destructive" aria-label="削除" title="削除" onClick={() => remove(r)}>
                         <Trash2 className="size-4" />
                       </Button>
                     </td>
                   </tr>
                 ),
               )}
-              <tr className="bg-primary/5">
+              {isAdmin ? <tr className="bg-primary/5">
                 {inputs(draft, setDraft, add)}
                 <td className="p-1">
                   <Button className="h-10" disabled={busy} onClick={add}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} 登録
                   </Button>
                 </td>
-              </tr>
+              </tr> : null}
             </tbody>
           </table>
-        </div>
+        </PurchaseScroll>
       )}
       <p className="mt-2 text-xs text-muted-foreground">新規登録は記載者「管理者」・承認済として記入・履歴にも入ります。セルをタップするとコピーできます。</p>
     </main>
   );
+}
+
+function InspectionInline({row,field,onSaved}:{row:Row;field:"delivered_on"|"amount"|"inspection_no";onSaved:()=>Promise<void>}) {
+ const original=field==="amount" ? (row.amount==null ? "" : String(row.amount)) : (row[field] ?? "");
+ const [value,setValue]=useState(original);
+ useEffect(()=>setValue(original),[original]);
+ const commit=async()=>{
+  if(value===original)return;
+  const n=num(value);
+  if(field==="amount" && value.trim() && n===null){toast.error("単価は数値で入力してください");setValue(original);return;}
+  const result=field==="inspection_no" ? await supabase.from("purchase_admin_fields").upsert({purchase_id:row.id,inspection_no:value.trim() || null}) : await supabase.from("purchases").update(field==="amount" ? {amount:n} : {delivered_on:value || null}).eq("id",row.id);
+  if(result.error){toast.error("保存に失敗しました");setValue(original);return;}
+  await onSaved();
+ };
+ return <Input aria-label={field==="amount" ? "単価" : field==="delivered_on" ? "納品日" : "検収番号"} type={field==="delivered_on" ? "date" : "text"} inputMode={field==="amount" ? "decimal" : undefined} className="h-9 min-w-0 px-1.5 text-sm" value={value} onChange={(e)=>setValue(e.target.value)} onBlur={()=>void commit()} onKeyDown={(e)=>e.key==="Enter" && e.currentTarget.blur()}/>;
 }
