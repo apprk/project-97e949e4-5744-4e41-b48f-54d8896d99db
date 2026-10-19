@@ -32,6 +32,8 @@ export const Route = createFileRoute("/_authenticated/photos")({
       },
       { property: "og:title", content: "写真 | 三条工場 業務管理" },
       { property: "og:description", content: "撮影・アップロードした写真をフォルダで整理して管理します。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: PhotosPage,

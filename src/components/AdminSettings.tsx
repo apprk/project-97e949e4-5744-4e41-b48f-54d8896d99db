@@ -75,9 +75,9 @@ export function AccountModes() {
   const load = async () => {
     const [{ data: ps }, { data: roles }, { data: ms }, { data: pins }] = await Promise.all([
       supabase.from("profiles").select("id,name,slug,workplace").is("disabled_at", null).order("created_at"),
-      supabase.from("user_roles").select("user_id,role"),
-      supabase.from("account_modes").select("user_id,mode"),
-      supabase.from("account_pins").select("user_id,pin"),
+      isAdmin ? supabase.from("user_roles").select("user_id,role") : Promise.resolve({data:[]}),
+      isAdmin ? supabase.from("account_modes").select("user_id,mode") : Promise.resolve({data:[]}),
+      isAdmin ? supabase.from("account_pins").select("user_id,pin") : Promise.resolve({data:[]}),
     ]);
     setList(
       (ps ?? []).map((p) => ({

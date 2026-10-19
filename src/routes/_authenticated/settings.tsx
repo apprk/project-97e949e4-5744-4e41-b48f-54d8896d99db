@@ -18,6 +18,8 @@ export const Route = createFileRoute("/_authenticated/settings")({
       { name: "description", content: "パスワード変更、パスワード省略期間、アカウント管理。" },
       { property: "og:title", content: "設定 | 三条工場 業務管理" },
       { property: "og:description", content: "パスワード変更、パスワード省略期間、アカウント管理。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SettingsPage,
@@ -43,10 +45,12 @@ function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if(!session || !can("settings")) {setLoaded(true);return;}
     void (async () => {
       const { data } = await supabase
         .from("app_settings")
         .select("password_skip_days,trash_retention_days")
+        .eq("user_id",session.user.id)
         .maybeSingle();
       if (data) {
         setSkip(String(data.password_skip_days));
@@ -54,7 +58,7 @@ function SettingsPage() {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [session?.user.id, can("settings")]);
 
   const changePin = async () => {
     if (!profile) return;

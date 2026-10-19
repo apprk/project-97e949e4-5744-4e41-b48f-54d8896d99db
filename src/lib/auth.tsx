@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile((p as Profile) ?? null);
     setIsAdmin(admin);
     const granted = (m ?? []).map((x) => x.mode);
+    if (granted.some((g)=>["settings.writers","settings.suppliers","settings.analytics"].includes(g))) granted.push("purchases.settings");
     setPerms(admin ? ALL_PERMS : granted);
     setModes(admin ? MODES.map((x) => x.key) : (granted.filter((g) => MODES.some((x) => x.key === g)) as ModeKey[]));
   };

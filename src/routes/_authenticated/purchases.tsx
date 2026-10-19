@@ -241,7 +241,7 @@ function PurchaseTable({
   suppliers,
   highlight,
 }: {
-  highlight?: { id: string; key: ColKey };
+  highlight?: { id: string; key: ColKey } | undefined;
   suppliers: Supplier[];
   rows: Purchase[];
   cols: ColKey[];
@@ -283,7 +283,7 @@ function PurchaseTable({
   };
 
   const update = async (id: string, patch: Partial<Purchase>) => {
-    const { error } = await supabase.from("purchases").update(patch).eq("id", id);
+    const { error } = await supabase.from("purchases").update((({estimate_no,inspection_no,vendor_no,...base})=>base)(patch)).eq("id", id);
     if (error) {
       toast.error("更新に失敗しました");
       return false;

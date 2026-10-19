@@ -21,6 +21,8 @@ export const Route = createFileRoute("/_authenticated/equipment")({
       { name: "description", content: "周期設定から次回予定日を自動生成し、実施履歴と未実施を管理します。" },
       { property: "og:title", content: "設備管理 | 三条工場 業務管理" },
       { property: "og:description", content: "周期設定から次回予定日を自動生成し、実施履歴と未実施を管理します。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: EquipmentPage,

@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchPurchaseRows } from "@/lib/purchase-data";
+import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { Input } from "@/components/ui/input";
 import { fmtYen, subtotal } from "@/lib/purchases";
 
 export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   beforeLoad: async () => {
-    const { data } = await supabase.rpc("has_perm", { _perm: "settings.analytics" });
+    const { data } = await supabase.rpc("has_perm", { _perm: "purchases.settings" });
     if (!data) throw redirect({ to: "/" });
   },
   head: () => ({
@@ -45,14 +47,7 @@ function AnalyticsPage() {
 
   useEffect(() => {
     setRows(null);
-    void supabase
-      .from("purchases")
-      .select("supplier,delivered_on,amount,quantity")
-      .is("deleted_at", null)
-      .not("delivered_on", "is", null)
-      .gte("delivered_on", from)
-      .lte("delivered_on", to)
-      .then(({ data }) => setRows((data as Row[]) ?? []));
+    void fetchPurchaseRows().then((data)=>setRows(data.filter((r)=>r.delivered_on && r.delivered_on>=from && r.delivered_on<=to) as Row[])).catch(()=>{toast.error("分析を読み込めませんでした");setRows([]);});
   }, [from, to]);
 
   const { bySupplier, total, trend } = useMemo(() => {

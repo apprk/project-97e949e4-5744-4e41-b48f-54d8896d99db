@@ -35,6 +35,8 @@ export const Route = createFileRoute("/_authenticated/schedule")({
       { name: "description", content: "日付ごとの申し送りを一覧で直接入力し、Excel・CSV・PDFへ出力します。" },
       { property: "og:title", content: "スケジュール | 三条工場 業務管理" },
       { property: "og:description", content: "日付ごとの申し送りを一覧で直接入力し、Excel・CSV・PDFへ出力します。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SchedulePage,
