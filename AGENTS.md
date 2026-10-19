@@ -18,3 +18,5 @@
 - Purchase tables share a viewport-bottom native horizontal track. Why: wide tables remain navigable without scrolling to their last row.
 - Purchase numbers live in `purchase_admin_fields` with restricted direct access and permission-checked projections/functions; 発注検収 edits the same `purchases` rows. Why: delegated estimate access does not expose inspection-only numbers or create double bookkeeping.
 - Purchase photo attachments reference storage paths in `purchase_attachments`; URLs are signed server-side after an RLS visibility check. Why: existing photos are reused without copying.
+- Administrator authentication uses server-verified passwords, migration markers and JWT-session-bound expiring grants; is_admin checks these grants after migration. Why: hidden navigation and browser storage are not authorization boundaries.
+- Administrator secrets are stored only by Auth, never in account_pins; the legacy PIN is accepted solely to authenticate first-time password migration. Why: preserve access while preventing PIN fallback after migration.

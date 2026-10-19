@@ -50,6 +50,42 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_auth_state: {
+        Row: {
+          migrated_at: string
+          user_id: string
+        }
+        Insert: {
+          migrated_at?: string
+          user_id: string
+        }
+        Update: {
+          migrated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      admin_login_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_gate: {
         Row: {
           id: number
@@ -613,6 +649,7 @@ export type Database = {
       }
       import_purchases: { Args: { _rows: Json }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
+      is_admin_account: { Args: { _id: string }; Returns: boolean }
       mark_purchase_checked: { Args: { _id: string }; Returns: undefined }
       my_workplace: { Args: never; Returns: string }
       purchase_rows: { Args: never; Returns: Json }

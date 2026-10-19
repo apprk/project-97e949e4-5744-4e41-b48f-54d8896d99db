@@ -12,6 +12,7 @@ import { pinToPassword, rememberLogin, slugToEmail, useAuth } from "@/lib/auth";
 import { AccountModes, GateSettings } from "@/components/AdminSettings";
 import { useServerFn } from "@tanstack/react-start";
 import { createAccount } from "@/lib/accounts.functions";
+import { changeAdministratorPassword, retainAdministratorSession } from "@/lib/admin-auth.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -36,7 +37,9 @@ const SKIP_OPTIONS = [
 
 function SettingsPage() {
   const create = useServerFn(createAccount);
-  const { profile, can, session, signOut } = useAuth();
+  const { profile, can, session, signOut, isAdmin } = useAuth();
+  const changeAdmin=useServerFn(changeAdministratorPassword);
+  const retainAdmin=useServerFn(retainAdministratorSession);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [skip, setSkip] = useState("0");
@@ -65,6 +68,12 @@ function SettingsPage() {
 
   const changePin = async () => {
     if (!profile) return;
+    if(isAdmin){
+      setBusy(true);
+      try{await changeAdmin({data:{current,next}});setCurrent("");setNext("");await signOut();window.location.assign("/admin-login");}
+      catch(e){toast.error(e instanceof Error?e.message:"変更に失敗しました");}
+      finally{setBusy(false);}return;
+    }
     if (!/^\d{4}$/.test(next)) {
       toast.error("新しいパスワードは4桁の数字で入力してください");
       return;
@@ -105,6 +114,7 @@ function SettingsPage() {
       return;
     }
     rememberLogin(days);
+    if(isAdmin){try{await retainAdmin({data:{days:days as 0|1|7|30}});}catch{toast.error("管理者の認証保持期間を保存できませんでした");return;}}
     toast.success("設定を保存しました");
   };
 
@@ -137,22 +147,24 @@ function SettingsPage() {
               <Label htmlFor="cur">現在のパスワード</Label>
               <Input
                 id="cur"
-                inputMode="numeric"
-                maxLength={4}
+                type="password"
+                inputMode={isAdmin ? "text" : "numeric"}
+                maxLength={isAdmin ? undefined : 4}
                 className="h-12"
                 value={current}
-                onChange={(e) => setCurrent(e.target.value.replace(/\D/g, ""))}
+                onChange={(e) => setCurrent(isAdmin ? e.target.value : e.target.value.replace(/\D/g, ""))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new">新しいパスワード（4桁）</Label>
+              <Label htmlFor="new">{isAdmin ? "新しいパスワード（英字＋数字、6文字以上）" : "新しいパスワード（4桁）"}</Label>
               <Input
                 id="new"
-                inputMode="numeric"
-                maxLength={4}
+                type="password"
+                inputMode={isAdmin ? "text" : "numeric"}
+                maxLength={isAdmin ? undefined : 4}
                 className="h-12"
                 value={next}
-                onChange={(e) => setNext(e.target.value.replace(/\D/g, ""))}
+                onChange={(e) => setNext(isAdmin ? e.target.value : e.target.value.replace(/\D/g, ""))}
               />
             </div>
             <Button className="h-12 w-full" disabled={busy} onClick={changePin}>
@@ -162,7 +174,7 @@ function SettingsPage() {
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-base font-bold">パスワード省略設定</h2>
+          <h2 className="text-base font-bold">{isAdmin ? "管理者の認証保持期間" : "パスワード省略設定"}</h2>
           <p className="mt-1 text-xs text-muted-foreground">同じ端末でパスワード入力を省略する期間です。</p>
           {loaded ? (
             <div className="mt-3 space-y-3">

@@ -54,7 +54,10 @@ export const listAccounts = createServerFn({ method: "POST" })
     if (!tokenValid(data.token)) return { ok: false as const, accounts: [] };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows } = await supabaseAdmin.from("profiles").select("id,name,slug").is("disabled_at", null).order("created_at");
-    return { ok: true as const, accounts: rows ?? [] };
+    const {data:admins,error}=await supabaseAdmin.from("user_roles").select("user_id").eq("role","admin");
+    if(error)throw new Error("アカウントを読み込めませんでした");
+    const hidden=new Set((admins ?? []).map((r)=>r.user_id));
+    return { ok: true as const, accounts: (rows ?? []).filter((r)=>!hidden.has(r.id)) };
   });
 
 export const getGateId = createServerFn({ method: "GET" })

@@ -11,6 +11,8 @@ export const Route = createFileRoute("/")({
     if (!getGateToken()) throw redirect({ to: "/gate" });
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
+    const {data:adminAccount}=await supabase.rpc("is_admin_account",{_id:data.user.id});
+    if(adminAccount){const {data:allowed}=await supabase.rpc("is_admin");if(!allowed || loginExpired()){clearLoginMemory();await supabase.auth.signOut();throw redirect({to:"/admin-login"});}}
     if (loginExpired()) {
       clearLoginMemory();
       await supabase.auth.signOut();

@@ -44,6 +44,8 @@ export const resetAccountPin = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const {data:roles}=await supabaseAdmin.from("user_roles").select("role").eq("user_id",data.userId);
+    if(roles?.some((r)=>r.role==="admin"))throw new Error("管理者のパスワードは専用の変更画面で変更してください");
     const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, { password: `sanjo-${data.pin}` });
     if (error) throw new Error("変更に失敗しました");
     await supabaseAdmin.from("account_pins").upsert({ user_id: data.userId, pin: data.pin, updated_at: new Date().toISOString() });
