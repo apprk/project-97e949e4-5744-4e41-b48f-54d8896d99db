@@ -1,0 +1,15 @@
+import { describe, expect, test } from "bun:test";
+import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed } from "./purchases";
+import { inPurchasePeriod, parsePurchaseSheet, purchaseCsvCells, validatePurchaseFile } from "./purchase-transfer";
+
+describe("purchase rules",()=>{
+ test("inspection defaults include approved and delivered",()=>{expect(inspectionMatches("approved","123")).toBe(true);expect(inspectionMatches("delivered","")).toBe(true);expect(inspectionMatches("pending","123")).toBe(false);});
+ test("approved-only excludes delivered",()=>{expect(inspectionMatches("delivered","123",false)).toBe(false);});
+ test("number filters distinguish blank numbers",()=>{expect(inspectionMatches("approved","123",true,"numbered")).toBe(true);expect(inspectionMatches("approved","",true,"numbered")).toBe(false);expect(inspectionMatches("approved","123",true,"missing")).toBe(false);expect(inspectionMatches("approved","",true,"missing")).toBe(true);});
+ test("blank workplace requires both permissions",()=>{expect(workplaceChangeAllowed(true,false,"")).toBe(false);expect(workplaceChangeAllowed(false,true,"")).toBe(false);expect(workplaceChangeAllowed(true,true,"")).toBe(true);expect(workplaceChangeAllowed(true,false,"三条")).toBe(true);});
+ test("katakana comparison equates half and full width",()=>{expect(normalizePurchaseText("ﾎﾞﾙﾄ")).toBe(normalizePurchaseText("ボルト"));});
+ test("date period includes both endpoints",()=>{expect(inPurchasePeriod("2024-08-13","2024-08-13","2024-08-13")).toBe(true);expect(inPurchasePeriod("2024-08-12","2024-08-13","")).toBe(false);expect(inPurchasePeriod("2025-01-01")).toBe(true);});
+ test("only exact purchase workbook name is accepted",()=>{expect(()=>validatePurchaseFile("物品購入依頼表_(三条）’2021.04～.xlsx")).not.toThrow();expect(()=>validatePurchaseFile("物品購入.xlsx")).toThrow();});
+ test("import starts at row seven with fixed mappings",()=>{const r=Array(27).fill("");r[2]="2024/8/13";r[3]="記載者";r[4]="ボルト";r[5]="A";r[7]="B";r[8]=2;r[9]="個";r[10]="備考";r[12]="発注先";r[17]="123";r[26]=500;const rows=parsePurchaseSheet([r,...Array(5).fill([]),r]);expect(rows.length).toBe(1);expect(rows[0]).toEqual({written_on:"2024-08-13",writer:"記載者",item_name:"ボルト",model:"A B",quantity:2,unit:"個",note:"備考",supplier:"発注先",estimate_no:"123",delivered_on:null,amount:500});});
+ test("CSV preserves 27 columns and leaves G/H empty",()=>{const r=purchaseCsvCells({written_on:"2024-08-13",writer:"記載者",item_name:"ボルト",model:"A B",quantity:2,unit:"個",note:"備考",supplier:"発注先",estimate_no:"123",delivered_on:null,amount:500});expect(r.length).toBe(27);expect(r[2]).toBe("2024-08-13");expect(r[5]).toBe("A B");expect(r[6]).toBe("");expect(r[7]).toBe("");expect(r[12]).toBe("発注先");expect(r[17]).toBe("123");expect(r[25]).toBe("");expect(r[26]).toBe("500");});
+});
