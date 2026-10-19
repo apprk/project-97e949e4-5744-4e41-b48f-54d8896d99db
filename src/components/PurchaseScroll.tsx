@@ -21,7 +21,7 @@ export function PurchaseScroll({ children }: { children: ReactNode }) {
       if (track.current && table.current) track.current.scrollLeft = table.current.scrollLeft;
     }}>{children}</div>
     <div className="fixed inset-x-3 bottom-0 z-30 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
-      <div ref={track} role="region" aria-label="横スクロール" className="h-6 overflow-x-scroll overflow-y-hidden" onScroll={() => {
+      <div ref={track} role="region" aria-label="横スクロール" className="purchase-scroll-track h-6 overflow-x-scroll overflow-y-hidden" onScroll={() => {
         if (table.current && track.current) table.current.scrollLeft = track.current.scrollLeft;
       }}><div style={{ width }} className="h-px" /></div>
     </div>

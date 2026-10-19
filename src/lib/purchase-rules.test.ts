@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
 import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed } from "./purchases";
 import { inPurchasePeriod, parsePurchaseSheet, purchaseCsvCells, validatePurchaseFile } from "./purchase-transfer";
