@@ -1,8 +1,8 @@
 # Work
-- [ ] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace.
-- [ ] Diagnose supplier/vendor persistence across all edit paths and repair without changing unrelated rows.
-- [ ] Repair and test purchase analytics reads, inclusive delivery periods, subtotals and empty/error states.
-- [ ] Verify saved purchase changes and analytics through real UI; preserve existing data/settings.
+- [x] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace. Four/five-tap browser flow verified.
+- [x] Diagnose supplier/vendor persistence across all edit paths and repair without changing unrelated rows; vendor preservation rules tested.
+- [x] Repair and test purchase analytics reads, inclusive delivery periods, subtotals and empty/error states; 27 purchase/analytics/auth tests pass.
+- [ ] Verify saved purchase changes and analytics through real UI; preserve existing data/settings. Blocked: migrated administrator requires dedicated password login; a minted Auth session correctly cannot bypass the administrator grant.
 - [x] Upgrade equipment data without deleting existing records; preserve other modules.
 - [x] Implement maintenance date rules, continuous entry, lists, planning, grouping and admin visibility/master settings.
 - [x] Implement dated history comments and existing/device photo attachments.
