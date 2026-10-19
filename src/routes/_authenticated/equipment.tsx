@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, CheckCircle2, FileDown, LayoutList, Loader2, Plus, Search, Settings, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, FileDown, LayoutList, Loader2, Plus, Search, Settings, Wrench } from "lucide-react";
+import { addMonths, format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/_authenticated/equipment")({
   component: EquipmentPage,
 });
 
-const TABS=[{key:"all",label:"全件"},{key:"this",label:"今月"},{key:"next",label:"来月"},{key:"month",label:"指定月"},{key:"overdue",label:"未実施"},{key:"plan",label:"計画"}];
+const TABS=[{key:"all",label:"全件"},{key:"month",label:"月別"},{key:"overdue",label:"未実施"},{key:"plan",label:"計画"}];
 function EquipmentPage() {
   const {session,isAdmin}=useAuth();
   const [items,setItems]=useState<Maintenance[]>([]);
@@ -48,6 +49,7 @@ function EquipmentPage() {
   const [descending,setDescending]=useState(false);
   const [group,setGroup]=useState<string|null>(null);
   const [historyOf,setHistoryOf]=useState<Maintenance|null>(null);
+  const [editingRecord,setEditingRecord]=useState<Maintenance|null>(null);
   const [newKey,setNewKey]=useState(0);
   const load=async()=>{
     try {
