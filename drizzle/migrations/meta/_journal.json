@@ -50,6 +50,13 @@
       "when": 1792369843839,
       "tag": "0006_prevent_administrator_plaintext_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792370788493,
+      "tag": "0007_maintenance_records_and_history_photos",
+      "breakpoints": true
     }
   ]
 }

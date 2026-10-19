@@ -133,6 +133,8 @@ export type Database = {
       }
       equipment: {
         Row: {
+          after_breakdown: boolean
+          assignee: string | null
           content: string | null
           created_at: string
           cycle_unit: string | null
@@ -142,10 +144,15 @@ export type Database = {
           id: string
           name: string
           next_date: string | null
+          planned_on: string | null
+          repair_content: string
+          stopped: boolean
           updated_at: string
           user_id: string
         }
         Insert: {
+          after_breakdown?: boolean
+          assignee?: string | null
           content?: string | null
           created_at?: string
           cycle_unit?: string | null
@@ -155,10 +162,15 @@ export type Database = {
           id?: string
           name: string
           next_date?: string | null
+          planned_on?: string | null
+          repair_content?: string
+          stopped?: boolean
           updated_at?: string
           user_id: string
         }
         Update: {
+          after_breakdown?: boolean
+          assignee?: string | null
           content?: string | null
           created_at?: string
           cycle_unit?: string | null
@@ -168,6 +180,30 @@ export type Database = {
           id?: string
           name?: string
           next_date?: string | null
+          planned_on?: string | null
+          repair_content?: string
+          stopped?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      equipment_display_settings: {
+        Row: {
+          show_assignee: boolean
+          show_name: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          show_assignee?: boolean
+          show_name?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          show_assignee?: boolean
+          show_name?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -210,6 +246,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      equipment_history_attachments: {
+        Row: {
+          created_at: string
+          history_id: string
+          id: string
+          photo_id: string | null
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          history_id: string
+          id?: string
+          photo_id?: string | null
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          history_id?: string
+          id?: string
+          photo_id?: string | null
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_history_attachments_history_id_fkey"
+            columns: ["history_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_history_attachments_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipment_names: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
       photo_folder_items: {
         Row: {

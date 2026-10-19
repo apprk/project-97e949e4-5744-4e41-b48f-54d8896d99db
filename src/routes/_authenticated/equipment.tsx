@@ -1,18 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileDown, History, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, CheckCircle2, FileDown, LayoutList, Loader2, Plus, Search, Settings, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { exportCsv, exportPdf } from "@/lib/exporters";
 import { useAuth } from "@/lib/auth";
+import { readAllPages } from "@/lib/schedule-import";
+import { equipmentGroup, japanToday, latestCompletion, maintenanceMatches, nextTiming, normalizeMaintenance, planMonths, sortMaintenance, type Completion, type Maintenance } from "@/lib/maintenance";
+import { blankMaintenance, RecordEditor, type DisplaySettings, type EquipmentName } from "@/components/maintenance/RecordEditor";
+import { HistoryPanel } from "@/components/maintenance/HistoryPanel";
+import { MaintenanceSettings } from "@/components/maintenance/MaintenanceSettings";
 
 export const Route = createFileRoute("/_authenticated/equipment")({
   head: () => ({
@@ -28,400 +30,59 @@ export const Route = createFileRoute("/_authenticated/equipment")({
   component: EquipmentPage,
 });
 
-type Unit = "year" | "month" | "week";
-type Equipment = {
-  id: string;
-  user_id: string;
-  name: string;
-  content: string | null;
-  cycle_value: number | null;
-  cycle_unit: Unit | null;
-  first_date: string | null;
-  next_date: string | null;
-};
-type Hist = { id: string; equipment_id: string; performed_on: string; comment: string | null };
-
-const UNIT_LABEL: Record<Unit, string> = { year: "年", month: "ヶ月", week: "週" };
-
-function addCycle(date: string, value: number, unit: Unit) {
-  const d = new Date(date + "T00:00:00");
-  if (unit === "year") d.setFullYear(d.getFullYear() + value);
-  if (unit === "month") d.setMonth(d.getMonth() + value);
-  if (unit === "week") d.setDate(d.getDate() + value * 7);
-  return d.toISOString().slice(0, 10);
-}
-
-/** 過去履歴から平均周期（日数）を計算 */
-function averageCycleDays(list: Hist[]) {
-  const dates = list.map((h) => h.performed_on).sort();
-  if (dates.length < 2) return null;
-  let total = 0;
-  for (let i = 1; i < dates.length; i++) {
-    total += (new Date(dates[i]!).getTime() - new Date(dates[i - 1]!).getTime()) / 86400000;
-  }
-  return Math.round(total / (dates.length - 1));
-}
-
-const monthKey = (d: string) => d.slice(0, 7);
-const thisMonth = () => new Date().toISOString().slice(0, 7);
-const nextMonth = () => {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 7);
-};
-
-const emptyEq = (): Equipment => ({
-  id: "",
-  user_id: "",
-  name: "",
-  content: "",
-  cycle_value: 1,
-  cycle_unit: "year",
-  first_date: new Date().toISOString().slice(0, 10),
-  next_date: null,
-});
-
+const TABS=[{key:"all",label:"全件"},{key:"this",label:"今月"},{key:"next",label:"来月"},{key:"month",label:"指定月"},{key:"overdue",label:"未実施"},{key:"plan",label:"計画"}];
 function EquipmentPage() {
-  const { session } = useAuth();
-  const [items, setItems] = useState<Equipment[] | null>(null);
-  const [history, setHistory] = useState<Hist[]>([]);
-  const [editing, setEditing] = useState<Equipment | null>(null);
-  const [historyOf, setHistoryOf] = useState<Equipment | null>(null);
-  const [doneDate, setDoneDate] = useState(new Date().toISOString().slice(0, 10));
-  const [doneComment, setDoneComment] = useState("");
-  const [tab, setTab] = useState("this");
-  const [month, setMonth] = useState(thisMonth());
-
-  const load = async () => {
-    const [{ data: eq }, { data: hs }] = await Promise.all([
-      supabase.from("equipment").select("*").is("deleted_at", null).order("next_date", { nullsFirst: false }),
-      supabase.from("equipment_history").select("id,equipment_id,performed_on,comment").is("deleted_at", null),
-    ]);
-    setItems((eq as Equipment[]) ?? []);
-    setHistory((hs as Hist[]) ?? []);
+  const {session,isAdmin}=useAuth();
+  const [items,setItems]=useState<Maintenance[]>([]);
+  const [history,setHistory]=useState<Completion[]>([]);
+  const [names,setNames]=useState<EquipmentName[]>([]);
+  const [display,setDisplay]=useState<DisplaySettings>({show_name:true,show_assignee:true});
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(false);
+  const [tab,setTab]=useState("all");
+  const [view,setView]=useState("list");
+  const [month,setMonth]=useState(japanToday().slice(0,7));
+  const [today,setToday]=useState(japanToday());
+  const [search,setSearch]=useState("");
+  const [sort,setSort]=useState("next");
+  const [descending,setDescending]=useState(false);
+  const [group,setGroup]=useState<string|null>(null);
+  const [historyOf,setHistoryOf]=useState<Maintenance|null>(null);
+  const [newKey,setNewKey]=useState(0);
+  const load=async()=>{
+    try {
+      const [eq,hs,ns,settings]=await Promise.all([
+        readAllPages<Maintenance>((from,to)=>supabase.from("equipment").select("id,user_id,name,repair_content,assignee,cycle_value,cycle_unit,planned_on,stopped,after_breakdown,created_at").is("deleted_at",null).order("created_at").order("id").range(from,to)),
+        readAllPages<Completion>((from,to)=>supabase.from("equipment_history").select("id,equipment_id,user_id,performed_on,comment,created_at").is("deleted_at",null).order("id").range(from,to)),
+        readAllPages<EquipmentName>((from,to)=>supabase.from("equipment_names").select("id,name").order("name").order("id").range(from,to)),
+        session?supabase.from("equipment_display_settings").select("show_name,show_assignee").eq("user_id",session.user.id).maybeSingle():Promise.resolve({data:null,error:null})
+      ]);
+      if(settings.error)throw settings.error;
+      setItems(eq);setHistory(hs);setNames(ns);setDisplay(settings.data??{show_name:true,show_assignee:true});setError(false);
+    }catch{setError(true);toast.error("設備管理を読み込めませんでした");}finally{setLoading(false);}
   };
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  const save = async () => {
-    if (!editing || !session) return;
-    if (!editing.name.trim()) {
-      toast.error("設備名を入力してください");
-      return;
-    }
-    const next =
-      editing.first_date && editing.cycle_value && editing.cycle_unit
-        ? (editing.next_date ?? addCycle(editing.first_date, editing.cycle_value, editing.cycle_unit))
-        : editing.next_date;
-    const payload = {
-      user_id: session.user.id,
-      name: editing.name.trim(),
-      content: editing.content,
-      cycle_value: editing.cycle_value,
-      cycle_unit: editing.cycle_unit,
-      first_date: editing.first_date,
-      next_date: next,
-    };
-    const { error } = editing.id
-      ? await supabase.from("equipment").update(payload).eq("id", editing.id)
-      : await supabase.from("equipment").insert(payload);
-    if (error) {
-      toast.error("保存に失敗しました");
-      return;
-    }
-    toast.success("保存しました");
-    setEditing(null);
-    void load();
-  };
-
-  const remove = async (id: string) => {
-    await supabase.from("equipment").update({ deleted_at: new Date().toISOString() }).eq("id", id);
-    toast.success("ごみ箱へ移動しました");
-    setEditing(null);
-    void load();
-  };
-
-  /** 実施登録 → 次回予定日を自動生成（周期未設定なら平均周期を使用） */
-  const complete = async () => {
-    if (!historyOf || !session) return;
-    const { error } = await supabase.from("equipment_history").insert({
-      equipment_id: historyOf.id,
-      user_id: session.user.id,
-      performed_on: doneDate,
-      comment: doneComment || null,
-    });
-    if (error) {
-      toast.error("登録に失敗しました");
-      return;
-    }
-    const own = history.filter((h) => h.equipment_id === historyOf.id);
-    let next: string | null = null;
-    if (historyOf.cycle_value && historyOf.cycle_unit) {
-      next = addCycle(doneDate, historyOf.cycle_value, historyOf.cycle_unit);
-    } else {
-      const avg = averageCycleDays([...own, { id: "", equipment_id: historyOf.id, performed_on: doneDate, comment: null }]);
-      if (avg) {
-        const d = new Date(doneDate + "T00:00:00");
-        d.setDate(d.getDate() + avg);
-        next = d.toISOString().slice(0, 10);
-      }
-    }
-    await supabase.from("equipment").update({ next_date: next }).eq("id", historyOf.id);
-    toast.success(next ? `実施を登録しました（次回予定 ${next}）` : "実施を登録しました");
-    setDoneComment("");
-    setHistoryOf(null);
-    void load();
-  };
-
-  const list = items ?? [];
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const filtered = useMemo(() => {
-    if (tab === "overdue") return list.filter((e) => e.next_date && e.next_date < todayStr);
-    if (tab === "this") return list.filter((e) => e.next_date && monthKey(e.next_date) === thisMonth());
-    if (tab === "next") return list.filter((e) => e.next_date && monthKey(e.next_date) === nextMonth());
-    if (tab === "month") return list.filter((e) => e.next_date && monthKey(e.next_date) === month);
-    return list;
-  }, [list, tab, month, todayStr]);
-
-  const csvBody = list.map((e) => [
-    e.name,
-    e.content,
-    e.cycle_value && e.cycle_unit ? `${e.cycle_value}${UNIT_LABEL[e.cycle_unit]}` : "",
-    e.first_date,
-    e.next_date,
-  ]);
-  const csvHeaders = ["設備名", "管理内容", "周期", "初回実施日", "次回予定日"];
-
-  return (
-    <div className="min-h-screen bg-background">
-      <AppHeader title="設備管理" />
-      <main className="mx-auto max-w-5xl px-4 pb-24 pt-4">
-        <Button size="lg" className="h-12 w-full" onClick={() => setEditing(emptyEq())}>
-          <Plus className="size-5" /> 設備を登録
-        </Button>
-
-        <Tabs value={tab} onValueChange={setTab} className="mt-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="this">今月</TabsTrigger>
-            <TabsTrigger value="next">来月</TabsTrigger>
-            <TabsTrigger value="month">指定月</TabsTrigger>
-            <TabsTrigger value="overdue">未実施</TabsTrigger>
-            <TabsTrigger value="all">全件</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {tab === "month" ? (
-          <Input type="month" className="mt-3 h-12" value={month} onChange={(e) => setMonth(e.target.value)} />
-        ) : null}
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" className="bg-card" onClick={() => exportCsv(csvHeaders, csvBody, "設備管理.csv")}>
-            <FileDown className="size-4" /> CSV出力
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-card"
-            onClick={() => exportPdf("設備管理一覧", csvHeaders, csvBody as (string | null)[][])}
-          >
-            <FileDown className="size-4" /> PDF出力
-          </Button>
-        </div>
-
-        {items === null ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="size-6 animate-spin text-primary" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">該当する設備はありません。</p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {filtered.map((e) => {
-              const own = history.filter((h) => h.equipment_id === e.id);
-              const avg = averageCycleDays(own);
-              const overdue = !!e.next_date && e.next_date < todayStr;
-              return (
-                <li key={e.id} className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-bold">{e.name}</p>
-                      <p className="text-sm text-muted-foreground">{e.content}</p>
-                    </div>
-                    {overdue ? (
-                      <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-xs font-bold text-destructive-foreground">
-                        未実施
-                      </span>
-                    ) : null}
-                  </div>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
-                    <div>
-                      <dt className="inline">周期: </dt>
-                      <dd className="inline">
-                        {e.cycle_value && e.cycle_unit
-                          ? `${e.cycle_value}${UNIT_LABEL[e.cycle_unit]}`
-                          : avg
-                            ? `平均 ${avg}日`
-                            : "未設定"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="inline">初回: </dt>
-                      <dd className="inline">{e.first_date ?? "-"}</dd>
-                    </div>
-                    <div>
-                      <dt className="inline">次回予定: </dt>
-                      <dd className="inline font-bold text-foreground">{e.next_date ?? "-"}</dd>
-                    </div>
-                    <div>
-                      <dt className="inline">実施回数: </dt>
-                      <dd className="inline">{own.length}</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      className="h-11 flex-1"
-                      onClick={() => {
-                        setHistoryOf(e);
-                        setDoneDate(new Date().toISOString().slice(0, 10));
-                      }}
-                    >
-                      <CheckCircle2 className="size-5" /> 実施を登録
-                    </Button>
-                    <Button variant="outline" className="h-11 bg-card" onClick={() => setEditing(e)}>
-                      編集
-                    </Button>
-                  </div>
-                  {own.length > 0 ? (
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-xs font-medium text-primary">
-                        <History className="mr-1 inline size-3.5" />
-                        履歴を表示（{own.length}件）
-                      </summary>
-                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {own
-                          .sort((a, b) => b.performed_on.localeCompare(a.performed_on))
-                          .map((h) => (
-                            <li key={h.id}>
-                              {h.performed_on} {h.comment}
-                            </li>
-                          ))}
-                      </ul>
-                    </details>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </main>
-
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing?.id ? "設備を編集" : "設備を登録"}</DialogTitle>
-          </DialogHeader>
-          {editing ? (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-name">設備名</Label>
-                <Input
-                  id="eq-name"
-                  className="h-12"
-                  value={editing.name}
-                  onChange={(ev) => setEditing({ ...editing, name: ev.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-content">管理内容</Label>
-                <Textarea
-                  id="eq-content"
-                  rows={2}
-                  value={editing.content ?? ""}
-                  onChange={(ev) => setEditing({ ...editing, content: ev.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="eq-cycle">周期</Label>
-                  <Input
-                    id="eq-cycle"
-                    type="number"
-                    min={1}
-                    className="h-12"
-                    value={editing.cycle_value ?? ""}
-                    onChange={(ev) =>
-                      setEditing({ ...editing, cycle_value: ev.target.value ? Number(ev.target.value) : null })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>単位</Label>
-                  <Select
-                    {...(editing.cycle_unit ? { value: editing.cycle_unit } : {})}
-                    onValueChange={(v) => setEditing({ ...editing, cycle_unit: v as Unit })}
-                  >
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder="選択" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="year">年</SelectItem>
-                      <SelectItem value="month">ヶ月</SelectItem>
-                      <SelectItem value="week">週</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-first">初回実施日</Label>
-                <Input
-                  id="eq-first"
-                  type="date"
-                  className="h-12"
-                  value={editing.first_date ?? ""}
-                  onChange={(ev) => setEditing({ ...editing, first_date: ev.target.value, next_date: null })}
-                />
-              </div>
-              <div className="flex gap-2 pb-2">
-                <Button size="lg" className="h-12 flex-1" onClick={save}>
-                  <Save className="size-5" /> 保存
-                </Button>
-                {editing.id ? (
-                  <Button size="lg" variant="destructive" className="h-12" onClick={() => remove(editing.id)}>
-                    <Trash2 className="size-5" />
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!historyOf} onOpenChange={(o) => !o && setHistoryOf(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>実施を登録：{historyOf?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="done-date">実施日</Label>
-              <Input
-                id="done-date"
-                type="date"
-                className="h-12"
-                value={doneDate}
-                onChange={(e) => setDoneDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="done-comment">コメント</Label>
-              <Textarea id="done-comment" rows={3} value={doneComment} onChange={(e) => setDoneComment(e.target.value)} />
-            </div>
-            <Button size="lg" className="h-12 w-full" onClick={complete}>
-              <CheckCircle2 className="size-5" /> 登録して次回予定を作成
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+  useEffect(()=>{if(session)void load();},[session?.user.id]);
+  useEffect(()=>{const refresh=()=>{setToday(japanToday());if(document.visibilityState==="visible")void load();};const timer=setInterval(()=>setToday(japanToday()),60000);document.addEventListener("visibilitychange",refresh);return()=>{clearInterval(timer);document.removeEventListener("visibilitychange",refresh);};},[session?.user.id]);
+  const ownHistory=(r:Maintenance)=>history.filter(h=>h.equipment_id===r.id);
+  const timing=(r:Maintenance)=>nextTiming(r,ownHistory(r),today);
+  const inGroup=(r:Maintenance)=>!group||equipmentGroup(r.name,names)===group;
+  const keyword=normalizeMaintenance(search);
+  const searched=items.filter(r=>inGroup(r)&&(!keyword||normalizeMaintenance([r.repair_content,r.name,r.assignee,r.planned_on,r.cycle_value,r.cycle_unit,latestCompletion(ownHistory(r)),...ownHistory(r).flatMap(h=>[h.performed_on,h.comment]),timing(r).kind==="state"?nextTiming(r,ownHistory(r),today).kind==="state"?r.stopped?"停止":r.after_breakdown?"破損後":"未定":"":""].filter(v=>v!=null).join(" ")).includes(keyword)));
+  const sorted=sortMaintenance(searched.filter(r=>maintenanceMatches(timing(r),tab,today,month)),history,today,sort,descending);
+  const registration=items.filter(inGroup).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()||a.id.localeCompare(b.id));
+  const timingLabel=(r:Maintenance)=>{const t=timing(r);return t.kind==="date"?t.date:t.label;};
+  const exportHeaders=["修理内容",...(display.show_name?["設備名"]:[]),...(display.show_assignee?["担当"]:[]),"周期","予定日","次回時期","最新実施日","実施履歴"];
+  const exportRows=sorted.map(r=>[r.repair_content,...(display.show_name?[r.name]:[]),...(display.show_assignee?[r.assignee??""]:[]),r.cycle_value&&r.cycle_unit?`${r.cycle_value}${({year:"年",month:"ヶ月",week:"週"})[r.cycle_unit]}`:"",r.planned_on??"",timingLabel(r),latestCompletion(ownHistory(r))??"",[...ownHistory(r)].sort((a,b)=>new Date(a.performed_on).getTime()-new Date(b.performed_on).getTime()).map(h=>`${h.performed_on} ${h.comment??""}`).join(" / ")]);
+  const title=view==="settings"?"保全管理の設定":view==="register"?"修理内容の登録・編集":view==="groups"?"設備毎":group?`設備管理 — ${group}`:"設備管理";
+  return <div className="min-h-screen bg-background"><AppHeader title="設備管理"/>
+    <div className="sticky top-16 z-10 border-b border-border bg-background px-3 py-2"><div className="mx-auto max-w-5xl"><div className="grid grid-cols-6 gap-1" role="tablist" aria-label="修理内容の表示">{TABS.map(t=><Button key={t.key} role="tab" aria-selected={tab===t.key&&view==="list"} variant={tab===t.key&&view==="list"?"default":"outline"} className="min-w-0 px-1 text-xs sm:text-sm" onClick={()=>{setTab(t.key);setView("list");}}>{t.label}</Button>)}</div><div className="mt-2 flex flex-wrap gap-2"><Button variant={view==="groups"?"default":"outline"} size="sm" onClick={()=>{setView("groups");setGroup(null);}}><Wrench className="size-4"/>設備毎</Button><Button size="sm" variant={view==="register"?"default":"outline"} onClick={()=>setView("register")}><Plus className="size-4"/>登録</Button>{view!=="list"||group?<Button size="sm" variant="outline" onClick={()=>{setView("list");setGroup(null);}}><LayoutList className="size-4"/>一覧</Button>:null}{isAdmin?<Button variant="outline" size="sm" onClick={()=>setView("settings")}><Settings className="size-4"/>保全管理の設定</Button>:null}</div></div></div>
+    <main className="mx-auto max-w-5xl px-4 pb-24 pt-5"><h2 className="mb-4 break-words text-xl font-bold">{title}</h2>
+      {loading?<div className="py-12 text-center"><Loader2 className="mx-auto size-6 animate-spin text-primary"/></div>:error?<div className="py-8 text-center"><p>読み込みに失敗しました。</p><Button className="mt-3" onClick={()=>void load()}>再読み込み</Button></div>:view==="settings"?<MaintenanceSettings names={names} reload={load}/>:view==="groups"?<div className="divide-y divide-border">{[...names.map(n=>n.name),"その他"].map(name=><Button key={name} variant="ghost" className="h-14 w-full justify-between rounded-none border-b border-border" onClick={()=>{setGroup(name);setTab("all");setView("list");}}><span>{name}</span><span className="text-muted-foreground">{items.filter(r=>equipmentGroup(r.name,names)===name).length}件</span></Button>)}</div>:view==="register"?<div>{registration.map(r=><RecordEditor key={r.id} record={r} names={names} display={display} reload={load} onHistory={setHistoryOf}/>)}<RecordEditor key={`new-${newKey}-${group}`} record={blankMaintenance(group&&group!=="その他"?group:"")} names={names} display={display} reload={load} onSaved={()=>setNewKey(k=>k+1)}/></div>:<>
+      <div className="mb-4 flex flex-wrap items-center gap-2"><div className="relative min-w-0 flex-1 basis-48"><Search className="absolute left-3 top-3 size-4 text-muted-foreground"/><Input aria-label="修理内容を検索" placeholder="検索" className="pl-9" value={search} onChange={e=>setSearch(e.target.value)}/></div><Select value={sort} onValueChange={setSort}><SelectTrigger className="w-40" aria-label="並び替え"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="repair">修理内容</SelectItem><SelectItem value="next">次回時期</SelectItem><SelectItem value="latest">最終実施日</SelectItem><SelectItem value="created">登録順</SelectItem></SelectContent></Select><Button variant="outline" size="icon" aria-label={descending?"降順から昇順へ":"昇順から降順へ"} title={descending?"降順":"昇順"} onClick={()=>setDescending(!descending)}>{descending?<ArrowDown className="size-4"/>:<ArrowUp className="size-4"/>}</Button></div>
+      {tab==="month"?<Input className="mb-4 max-w-xs" aria-label="指定月" type="month" value={month} onChange={e=>setMonth(e.target.value)}/>:null}
+      <div className="mb-4 flex flex-wrap items-center gap-2"><span className="mr-auto text-sm text-muted-foreground">{sorted.length}件{group?` / ${group}`:""}</span><Button variant="outline" size="sm" onClick={()=>exportCsv(exportHeaders,exportRows,"設備管理.csv")}><FileDown className="size-4"/>CSV出力</Button><Button variant="outline" size="sm" onClick={()=>exportPdf("設備管理一覧",exportHeaders,exportRows)}><FileDown className="size-4"/>PDF出力</Button></div>
+      {tab==="plan"?<div className="max-w-full overflow-x-auto pb-4" aria-label="保全計画"><div className="flex w-max gap-3">{["overdue",...planMonths(today)].map(m=><section key={m} className="w-56 border-x border-border"><h3 className="border-y border-border bg-muted px-3 py-3 font-bold">{m==="overdue"?"未実施":`${Number(m.slice(0,4))}年${Number(m.slice(5))}月`}</h3><div className="divide-y divide-border">{sorted.filter(r=>{const t=timing(r);return t.kind==="date"&&(m==="overdue"?maintenanceMatches(t,"overdue",today,month):t.date.slice(0,7)===m);}).map(r=><Button key={r.id} variant="ghost" className="h-auto min-h-20 w-full flex-col items-start gap-1 whitespace-normal rounded-none px-3 py-3 text-left" onClick={()=>setHistoryOf(r)}><span className="break-words font-bold">{r.repair_content}</span>{display.show_assignee&&r.assignee?<span className="text-xs text-muted-foreground">{r.assignee}</span>:null}{m==="overdue"?<span className="text-xs text-muted-foreground">予定時期 {timingLabel(r)}</span>:null}</Button>)}</div></section>)}</div></div>:!sorted.length?<p className="py-12 text-center text-sm text-muted-foreground">該当する修理内容はありません。</p>:<ul className="space-y-3">{sorted.map(r=>{const t=timing(r);const latest=latestCompletion(ownHistory(r));return <li key={r.id} className="rounded-lg border border-border bg-card p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="break-words font-bold">{r.repair_content}</h3><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">{display.show_name&&r.name?<span>設備名：{r.name}</span>:null}{display.show_assignee&&r.assignee?<span>担当：{r.assignee}</span>:null}</div></div><div className="text-right"><p className="text-xs text-muted-foreground">次回時期</p><p className={`font-bold ${maintenanceMatches(t,"overdue",today,month)?"text-destructive":"text-primary"}`}>{t.kind==="date"?t.date:t.label}</p>{t.inferred?<span className="text-[11px] text-muted-foreground">周期未記入</span>:null}</div></div><div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"><span>最新実施日：{latest??"—"}</span><span>履歴：{ownHistory(r).length}件</span>{r.cycle_value&&r.cycle_unit?<span>周期：{r.cycle_value}{({year:"年",month:"ヶ月",week:"週"})[r.cycle_unit]}</span>:null}{r.planned_on?<span>予定日：{r.planned_on}</span>:null}</div><div className="mt-4 flex gap-2"><Button className="flex-1" onClick={()=>setHistoryOf(r)}><CheckCircle2 className="size-4"/>実施日・履歴</Button><Button variant="outline" onClick={()=>{setView("register");setTimeout(()=>document.querySelector(`[data-record="${r.id}"]`)?.scrollIntoView({block:"center",behavior:"smooth"}),50);}}>編集</Button></div></li>;})}</ul>}
+      </>}
+    </main><Dialog open={!!historyOf} onOpenChange={open=>!open&&setHistoryOf(null)}><DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle className="break-words">{historyOf?.repair_content}</DialogTitle></DialogHeader>{historyOf?<HistoryPanel key={historyOf.id} record={items.find(r=>r.id===historyOf.id)??historyOf} history={history} reload={load}/>:null}</DialogContent></Dialog>
+  </div>;
 }
