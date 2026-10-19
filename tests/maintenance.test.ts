@@ -1,0 +1,25 @@
+import { describe, expect, test } from "bun:test";
+import { equipmentGroup, latestCompletion, maintenanceMatches, nextTiming, normalizeMaintenance, planMonths, sortMaintenance, type Maintenance } from "../src/lib/maintenance";
+const today="2026-10-19";
+const base:Maintenance={id:"a",user_id:"u",name:"モーター",repair_content:"修理",assignee:null,cycle_value:null,cycle_unit:null,planned_on:null,stopped:false,after_breakdown:false,created_at:"2026-01-01T00:00:00Z"};
+const hs=(...dates:string[])=>dates.map(performed_on=>({performed_on}));
+describe("maintenance rules",()=>{
+ test("stopped and after-breakdown override all dates",()=>{expect(nextTiming({...base,stopped:true,after_breakdown:true,planned_on:"2026-10-20",cycle_value:1,cycle_unit:"week"},hs("2026-10-18"),today)).toEqual({kind:"state",label:"停止・破損後",inferred:false});});
+ test("future scheduled date wins",()=>{expect(nextTiming({...base,planned_on:"2026-10-20",cycle_value:1,cycle_unit:"week"},hs("2026-10-18"),today)).toEqual({kind:"date",date:"2026-10-20",inferred:false});});
+ test("today scheduled date wins",()=>{expect(nextTiming({...base,planned_on:today},[],today)).toEqual({kind:"date",date:today,inferred:false});});
+ test("past scheduled date yields to latest completion plus cycle",()=>{expect(nextTiming({...base,planned_on:"2026-10-18",cycle_value:2,cycle_unit:"year"},hs("2026-09-07","2025-12-03"),today)).toEqual({kind:"date",date:"2028-09-07",inferred:false});});
+ test("month cycle clamps end of month correctly",()=>{expect(nextTiming({...base,cycle_value:1,cycle_unit:"month"},hs("2026-01-31"),today)).toEqual({kind:"date",date:"2026-02-28",inferred:false});});
+ test("week cycle crosses year boundary",()=>{expect(nextTiming({...base,cycle_value:1,cycle_unit:"week"},hs("2026-12-28"),today)).toEqual({kind:"date",date:"2027-01-04",inferred:false});});
+ test("latest completion means latest date not last insertion",()=>{expect(latestCompletion(hs("2026-09-07","2025-12-03"))).toBe("2026-09-07");});
+ test("average consecutive distinct days yields inferred date",()=>{expect(nextTiming(base,hs("2026-01-01","2026-01-11","2026-01-31"),today)).toEqual({kind:"date",date:"2026-02-15",inferred:true});});
+ test("one distinct completion day cannot infer cycle",()=>{expect(nextTiming(base,hs("2026-10-01","2026-10-01"),today)).toEqual({kind:"state",label:"未定",inferred:false});});
+ test("no history and expired plan is undetermined",()=>{expect(nextTiming({...base,planned_on:"2026-10-01",cycle_value:2,cycle_unit:"year"},[],today)).toEqual({kind:"state",label:"未定",inferred:false});});
+ test("overdue compares months not individual days",()=>{expect(maintenanceMatches({kind:"date",date:"2026-10-01",inferred:false},"overdue",today,"")).toBe(false);expect(maintenanceMatches({kind:"date",date:"2026-09-30",inferred:false},"overdue",today,"")).toBe(true);});
+ test("special states never enter date filters",()=>{for(const tab of ["this","next","month","overdue","plan"])expect(maintenanceMatches({kind:"state",label:"停止",inferred:false},tab,today,"2026-10")).toBe(false);});
+ test("month filters compare actual month and year",()=>{expect(maintenanceMatches({kind:"date",date:"2026-10-01",inferred:false},"this",today,"")).toBe(true);expect(maintenanceMatches({kind:"date",date:"2026-11-01",inferred:false},"next",today,"")).toBe(true);expect(maintenanceMatches({kind:"date",date:"2027-01-01",inferred:false},"month",today,"2027-01")).toBe(true);});
+ test("plan includes current through thirteen months ahead and overdue",()=>{expect(planMonths(today)).toHaveLength(14);expect(planMonths(today)[0]).toBe("2026-10");expect(planMonths(today)[13]).toBe("2027-11");expect(maintenanceMatches({kind:"date",date:"2027-12-01",inferred:false},"plan",today,"")).toBe(false);});
+ test("half and full width matching agrees",()=>{expect(normalizeMaintenance("ﾓｰﾀｰ Ａ１")).toBe(normalizeMaintenance("モーター A1"));expect(equipmentGroup("ﾓｰﾀｰ",[{name:"モーター"}])).toBe("モーター");});
+ test("unregistered and blank equipment group as other",()=>{expect(equipmentGroup("",[{name:"モーター"}])).toBe("その他");expect(equipmentGroup("ポンプ",[{name:"モーター"}])).toBe("その他");});
+ test("creation order supports both directions",()=>{const newer={...base,id:"b",created_at:"2026-02-01T00:00:00Z"};expect(sortMaintenance([newer,base],[],today,"created",false).map(r=>r.id)).toEqual(["a","b"]);expect(sortMaintenance([base,newer],[],today,"created",true).map(r=>r.id)).toEqual(["b","a"]);});
+ test("undetermined next dates sort safely behind dates",()=>{const dated={...base,id:"b",planned_on:today};expect(sortMaintenance([base,dated],[],today,"next",false).map(r=>r.id)).toEqual(["b","a"]);});
+});
