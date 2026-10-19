@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Image, Paperclip, Plus, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Image, Paperclip, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -32,8 +32,27 @@ export function HistoryPanel({ record, history, reload }: { record: Maintenance;
   const [preview,setPreview]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [loadingPhotos,setLoadingPhotos]=useState(false);
+  const [expanded,setExpanded]=useState(false);
+  const [planned,setPlanned]=useState(record.planned_on??"");
+  const [plannedBusy,setPlannedBusy]=useState(false);
   const fileRef=useRef<HTMLInputElement>(null);
   const own=history.filter(h=>h.equipment_id===record.id);
+  const sortedOwn=[...own].sort((a,b)=>(descending?-1:1)*(new Date(a.performed_on).getTime()-new Date(b.performed_on).getTime())||a.id.localeCompare(b.id));
+  const latestByDate=own.length?[...own].sort((a,b)=>new Date(b.performed_on).getTime()-new Date(a.performed_on).getTime()||b.id.localeCompare(a.id))[0]:null;
+  const visibleHistory=expanded?sortedOwn:latestByDate?[latestByDate]:[];
+  const savePlanned=async()=>{
+    setPlannedBusy(true);
+    const {data,error}=await supabase.from("equipment").update({planned_on:planned||null}).eq("id",record.id).select("id");
+    if(error||!data?.length)toast.error("予定日を保存できませんでした");else{await reload();toast.success("予定日を保存しました");}
+    setPlannedBusy(false);
+  };
+  const removeHistory=async(h:Completion)=>{
+    if(!confirm(`${h.performed_on}の実施履歴を削除しますか？添付写真との関連も解除されます。`))return;
+    setBusy(true);
+    const {data,error}=await supabase.from("equipment_history").update({deleted_at:new Date().toISOString()}).eq("id",h.id).eq("equipment_id",record.id).select("id");
+    if(error||!data?.length)toast.error("削除できませんでした");else{if(editing===h.id){setEditing(null);setDate(japanToday());setComment("");}await reload();toast.success("実施履歴を削除しました");}
+    setBusy(false);
+  };
   const loadAttachments=async()=>{
     const rows=own.length ? await readAllPages<Attachment>((from,to)=>supabase.from("equipment_history_attachments").select("id,history_id,storage_path,photo_id").in("history_id",own.map(h=>h.id)).order("id").range(from,to)) : [];
     setAttachments(rows);
