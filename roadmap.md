@@ -1,4 +1,8 @@
 # Work
+- [ ] Upgrade equipment data without deleting existing records; preserve other modules.
+- [ ] Implement maintenance date rules, continuous entry, lists, planning, grouping and admin visibility/master settings.
+- [ ] Implement dated history comments and existing/device photo attachments.
+- [ ] Test maintenance rules and real desktop/mobile flows; report any blockers honestly.
 - [x] Diagnose and repair schedule Excel import; real workbook 827 target dates, 27 updates, 800 unchanged, no errors; all 827 read back, repeat produces no writes, all 1149 out-of-range rows unchanged.
 - [x] Hide administrators from normal account selection; add hidden dedicated login.
 - [x] Add secure administrator password migration/change and server-enforced retention.
