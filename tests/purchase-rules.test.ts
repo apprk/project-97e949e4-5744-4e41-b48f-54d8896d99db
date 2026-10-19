@@ -1,7 +1,6 @@
-/// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
-import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed } from "./purchases";
-import { inPurchasePeriod, parsePurchaseSheet, purchaseCsvCells, validatePurchaseFile } from "./purchase-transfer";
+import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed } from "../src/lib/purchases";
+import { inPurchasePeriod, parsePurchaseSheet, purchaseCsvCells, validatePurchaseFile } from "../src/lib/purchase-transfer";
 
 describe("purchase rules",()=>{
  test("inspection defaults include approved and delivered",()=>{expect(inspectionMatches("approved","123")).toBe(true);expect(inspectionMatches("delivered","")).toBe(true);expect(inspectionMatches("pending","123")).toBe(false);});
