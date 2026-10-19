@@ -7,7 +7,9 @@ import { fetchPurchaseRows } from "@/lib/purchase-data";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/AppHeader";
 import { Input } from "@/components/ui/input";
-import { fmtYen, subtotal } from "@/lib/purchases";
+import { fmtYen, type Purchase } from "@/lib/purchases";
+import { aggregatePurchases, type AnalyticsUnit } from "@/lib/purchase-analytics";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   beforeLoad: async () => {
@@ -27,49 +29,33 @@ export const Route = createFileRoute("/_authenticated/purchase-analytics")({
   component: AnalyticsPage,
 });
 
-type Row = { supplier: string | null; delivered_on: string; amount: number | null; quantity: number | null };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--muted-foreground)"];
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-function weekStart(s: string) {
-  const d = new Date(s + "T00:00:00");
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return iso(d);
-}
 
 function AnalyticsPage() {
   const now = new Date();
   const [from, setFrom] = useState(iso(new Date(now.getFullYear(), now.getMonth() - 5, 1)));
   const [to, setTo] = useState(iso(now));
-  const [unit, setUnit] = useState<"day" | "week" | "month">("month");
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [unit, setUnit] = useState<AnalyticsUnit>("month");
+  const [rows, setRows] = useState<Purchase[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     setRows(null);
-    void fetchPurchaseRows().then((data)=>setRows(data.filter((r)=>r.delivered_on && r.delivered_on>=from && r.delivered_on<=to) as Row[])).catch(()=>{toast.error("分析を読み込めませんでした");setRows([]);});
-  }, [from, to]);
+    setFailed(false);
+    let active = true;
+    void fetchPurchaseRows().then((data) => { if (active) setRows(data); }).catch(() => {
+      if (!active) return;
+      toast.error("分析を読み込めませんでした"); setFailed(true); setRows([]);
+    });
+    return () => { active = false; };
+  }, [revision]);
 
-  const { bySupplier, total, trend } = useMemo(() => {
-    const m = new Map<string, number>();
-    const t = new Map<string, number>();
-    let total = 0;
-    for (const r of rows ?? []) {
-      const a = subtotal(r) ?? 0;
-      if (!a) continue;
-      total += a;
-      const s = r.supplier?.trim() || "（未入力）";
-      m.set(s, (m.get(s) ?? 0) + a);
-      const k = unit === "day" ? r.delivered_on : unit === "week" ? weekStart(r.delivered_on) : r.delivered_on.slice(0, 7);
-      t.set(k, (t.get(k) ?? 0) + a);
-    }
-    const bySupplier = [...m.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-    const trend = [...t.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, value]) => ({
-      label: unit === "month" ? `${Number(k.slice(0, 4))}/${Number(k.slice(5))}` : `${Number(k.slice(5, 7))}/${Number(k.slice(8))}${unit === "week" ? "週" : ""}`,
-      value,
-    }));
-    return { bySupplier, total, trend };
-  }, [rows, unit]);
+  const { bySupplier, total, trend, datedCount, pricedCount } = useMemo(() => aggregatePurchases(rows ?? [], from, to, unit), [rows, from, to, unit]);
+  const invalidPeriod = !!from && !!to && from > to;
+  const emptyMessage = datedCount === 0 ? "対象データがありません。" : "対象期間の納品データはありますが、単価または数量が未入力のため集計できません。";
 
   return (
     <div className="min-h-screen bg-background">
@@ -83,17 +69,20 @@ function AnalyticsPage() {
           <span className="ml-auto text-sm">小計合計 <b className="text-lg">{fmtYen(total)}</b></span>
         </section>
 
-        {rows === null ? (
+        {invalidPeriod ? <p role="alert" className="text-destructive">開始日を終了日以前にしてください。</p> : failed ? (
+          <div role="alert" className="space-y-2"><p>分析データを読み込めませんでした。</p><Button variant="outline" onClick={() => setRevision((r) => r + 1)}>再読み込み</Button></div>
+        ) : rows === null ? (
           <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
         ) : (
           <>
             <section className="rounded-xl border border-border bg-card p-4">
               <h2 className="mb-3 font-bold">発注先別 支払額・割合</h2>
-              {bySupplier.length === 0 ? (
-                <p className="text-sm text-muted-foreground">この期間の納品済データはありません。</p>
+              {pricedCount === 0 ? (
+                <p className="text-sm text-muted-foreground">{emptyMessage}</p>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="h-64">
+                    {total === 0 ? <p className="text-sm text-muted-foreground">小計合計は0円です。</p> :
                     <ResponsiveContainer>
                       <PieChart>
                         <Pie data={bySupplier} dataKey="value" nameKey="name" outerRadius="80%" innerRadius="45%">
@@ -101,7 +90,7 @@ function AnalyticsPage() {
                         </Pie>
                         <Tooltip formatter={(v: number) => fmtYen(v)} />
                       </PieChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer>}
                   </div>
                   <table className="w-full text-sm">
                     <tbody>
@@ -109,7 +98,7 @@ function AnalyticsPage() {
                         <tr key={s.name} className="border-b border-border">
                           <td className="py-2"><span className="mr-2 inline-block size-3 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} />{s.name}</td>
                           <td className="py-2 text-right font-bold">{fmtYen(s.value)}</td>
-                          <td className="w-16 py-2 text-right text-muted-foreground">{Math.round((s.value / total) * 100)}%</td>
+                          <td className="w-16 py-2 text-right text-muted-foreground">{Math.round(s.percentage)}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -123,13 +112,13 @@ function AnalyticsPage() {
                 <h2 className="font-bold">納品日による金額推移</h2>
                 <div className="ml-auto inline-flex rounded-lg border border-border p-0.5">
                   {(["day", "week", "month"] as const).map((u) => (
-                    <button key={u} type="button" onClick={() => setUnit(u)} className={`rounded-md px-3 py-1 text-sm ${unit === u ? "bg-primary text-primary-foreground" : ""}`}>
+                    <Button key={u} size="sm" variant={unit === u ? "default" : "ghost"} onClick={() => setUnit(u)}>
                       {u === "day" ? "日" : u === "week" ? "週" : "月"}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
-              <div className="h-72">
+              {pricedCount === 0 ? <p className="text-sm text-muted-foreground">{emptyMessage}</p> : <div className="h-72">
                 <ResponsiveContainer>
                   <BarChart data={trend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -139,7 +128,7 @@ function AnalyticsPage() {
                     <Bar dataKey="value" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </div>}
             </section>
           </>
         )}
