@@ -10,6 +10,9 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
+- Maintenance editing uses additive repair fields and preserves legacy fields; next timing is derived in a shared calendar-date module from scheduled dates and dated history. Why: past entries and old cached next dates must not change the latest-completion calculation.
+- Maintenance account visibility and equipment-name masters use admin-only configuration tables; history attachments reference history IDs and optional existing photo IDs, with RLS-checked server signing following current photo paths. Why: display changes and attachments must not erase values or alter source photographs.
+- Maintenance page sections live in focused components under components/maintenance with paginated reads. Why: continuous entry, planning and per-history photo flows stay independently maintainable without changing unrelated routes.
 - Schedule reads and import matching use stable paginated reads; Excel dates retain their raw year and imports verify returned writes and readback without deleting existing duplicate rows. Why: Data API limits and formatted date cells must not hide later years or create more duplicates.
 - Business modes are registered in `src/lib/modes.ts` (MODES); per-account access lives in `account_modes`, enforced in `_authenticated/route.tsx`. Why: new modes need one line, not new role types.
 - Device gate (初期認証) is verified server-side (`src/lib/gate.functions.ts`, `app_gate` table, server-only); a HMAC token is kept in localStorage. Why: iframe-safe and survives without re-entry.

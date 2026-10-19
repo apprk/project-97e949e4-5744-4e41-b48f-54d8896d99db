@@ -20,9 +20,9 @@ export const Route = createFileRoute("/_authenticated/equipment")({
   head: () => ({
     meta: [
       { title: "設備管理 | 三条工場 業務管理" },
-      { name: "description", content: "周期設定から次回予定日を自動生成し、実施履歴と未実施を管理します。" },
+      { name: "description", content: "修理内容・実施履歴・写真を記録し、次回時期と月別の保全計画を管理します。" },
       { property: "og:title", content: "設備管理 | 三条工場 業務管理" },
-      { property: "og:description", content: "周期設定から次回予定日を自動生成し、実施履歴と未実施を管理します。" },
+      { property: "og:description", content: "修理内容・実施履歴・写真を記録し、次回時期と月別の保全計画を管理します。" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -52,7 +52,7 @@ function EquipmentPage() {
   const load=async()=>{
     try {
       const [eq,hs,ns,settings]=await Promise.all([
-        readAllPages<Maintenance>((from,to)=>supabase.from("equipment").select("id,user_id,name,repair_content,assignee,cycle_value,cycle_unit,planned_on,stopped,after_breakdown,created_at").is("deleted_at",null).order("created_at").order("id").range(from,to)),
+        readAllPages<Maintenance>((from,to)=>supabase.from("equipment").select("id,user_id,name,repair_content,assignee,cycle_value,cycle_unit,planned_on,stopped,after_breakdown,created_at").is("deleted_at",null).order("created_at").order("id").range(from,to).returns<Maintenance[]>()),
         readAllPages<Completion>((from,to)=>supabase.from("equipment_history").select("id,equipment_id,user_id,performed_on,comment,created_at").is("deleted_at",null).order("id").range(from,to)),
         readAllPages<EquipmentName>((from,to)=>supabase.from("equipment_names").select("id,name").order("name").order("id").range(from,to)),
         session?supabase.from("equipment_display_settings").select("show_name,show_assignee").eq("user_id",session.user.id).maybeSingle():Promise.resolve({data:null,error:null})
@@ -67,7 +67,13 @@ function EquipmentPage() {
   const timing=(r:Maintenance)=>nextTiming(r,ownHistory(r),today);
   const inGroup=(r:Maintenance)=>!group||equipmentGroup(r.name,names)===group;
   const keyword=normalizeMaintenance(search);
-  const searched=items.filter(r=>inGroup(r)&&(!keyword||normalizeMaintenance([r.repair_content,r.name,r.assignee,r.planned_on,r.cycle_value,r.cycle_unit,latestCompletion(ownHistory(r)),...ownHistory(r).flatMap(h=>[h.performed_on,h.comment]),timing(r).kind==="state"?nextTiming(r,ownHistory(r),today).kind==="state"?r.stopped?"停止":r.after_breakdown?"破損後":"未定":"":""].filter(v=>v!=null).join(" ")).includes(keyword)));
+  const searched=items.filter(r=>{
+    if(!inGroup(r))return false;
+    if(!keyword)return true;
+    const t=timing(r);
+    const cycle=r.cycle_unit?({year:"年",month:"ヶ月",week:"週"})[r.cycle_unit]:"";
+    return normalizeMaintenance([r.repair_content,r.name,r.assignee,r.planned_on,r.cycle_value,cycle,latestCompletion(ownHistory(r)),...ownHistory(r).flatMap(h=>[h.performed_on,h.comment]),t.kind==="state"?t.label:t.date].filter(v=>v!=null).join(" ")).includes(keyword);
+  });
   const sorted=sortMaintenance(searched.filter(r=>maintenanceMatches(timing(r),tab,today,month)),history,today,sort,descending);
   const registration=items.filter(inGroup).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()||a.id.localeCompare(b.id));
   const timingLabel=(r:Maintenance)=>{const t=timing(r);return t.kind==="date"?t.date:t.label;};
