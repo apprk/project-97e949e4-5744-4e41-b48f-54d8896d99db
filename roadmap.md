@@ -1,5 +1,5 @@
 # Work
-- [ ] Diagnose and repair schedule Excel import, with per-stage counts and preservation checks for 2024-07-13 through 2026-11-30.
+- [x] Diagnose and repair schedule Excel import; real workbook 827 target dates, 27 updates, 800 unchanged, no errors; all 827 read back, repeat produces no writes, all 1149 out-of-range rows unchanged.
 - [x] Hide administrators from normal account selection; add hidden dedicated login.
 - [x] Add secure administrator password migration/change and server-enforced retention.
 - [x] Audit existing purchase requirements without rebuilding completed features.
