@@ -28,17 +28,22 @@ export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
     if(!preview?.length || busy) return;
     setBusy(true); setResult(null); setProgress({done:0,total:preview.length});
     let inserted=0, skipped=0, done=0;
+    const rowErrors:{written_on:string;item_name:string;reason:string}[]=[];
     try {
       for(let i=0;i<preview.length;i+=200) {
         const { data,error }=await supabase.rpc("import_purchases",{_rows: preview.slice(i,i+200)});
         if(error) throw error;
-        const counts=data as {inserted?:number;skipped?:number}|null;
+        const counts=data as {inserted?:number;skipped?:number;errors?:{written_on:string;item_name:string;reason:string}[]}|null;
         inserted+=Number(counts?.inserted ?? 0); skipped+=Number(counts?.skipped ?? 0);
+        rowErrors.push(...(counts?.errors ?? []));
         done+=Math.min(200,preview.length-i); setProgress({done,total:preview.length});
       }
-      toast.success(`読込完了：${inserted}件を登録${skipped?`、既登録の${skipped}件はスキップ`:""}しました`);
-      setResult(`完了：対象 ${preview.length}件 / 登録 ${inserted}件 / 既登録スキップ ${skipped}件`);
-      setPreview(null); setFile(null);
+      const errorLines=rowErrors.slice(0,10).map((e)=>`・${e.written_on} ${e.item_name}：${e.reason}`);
+      const errorText=rowErrors.length ? `\n登録できなかった行 ${rowErrors.length}件：\n${errorLines.join("\n")}${rowErrors.length>10?"\n…ほか":""}` : "";
+      if(rowErrors.length) toast.error(`${rowErrors.length}件の行は登録できませんでした`);
+      else toast.success(`読込完了：${inserted}件を登録${skipped?`、既登録の${skipped}件はスキップ`:""}しました`);
+      setResult(`完了：対象 ${preview.length}件 / 登録 ${inserted}件 / 既登録スキップ ${skipped}件${errorText}`);
+      if(!rowErrors.length) { setPreview(null); setFile(null); }
     } catch(e) {
       const detail=e instanceof Error && e.message ? `（${e.message}）` : "";
       setResult(`途中で停止しました${detail}。登録 ${inserted}件 / 既登録スキップ ${skipped}件 / 処理済み ${done}件（全 ${preview.length}件）。再実行しても登録済みのデータは重複しません。`);
