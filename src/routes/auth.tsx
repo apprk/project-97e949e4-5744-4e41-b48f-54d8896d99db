@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Delete, Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,18 +23,6 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-async function bootstrapAdmin() {
-  const email = slugToEmail("admin");
-  const { error } = await supabase.auth.signUp({
-    email,
-    password: pinToPassword("0000"),
-    options: { emailRedirectTo: window.location.origin, data: { name: "管理者", slug: "admin" } },
-  });
-  if (error) return;
-  // プロフィールと管理者権限はデータベーストリガーが自動作成する
-  await supabase.auth.signOut();
-}
-
 function AuthPage() {
   const router = useRouter();
   const { refresh } = useAuth();
@@ -43,6 +31,12 @@ function AuthPage() {
   const [selected, setSelected] = useState<Profile | null>(null);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
+  const taps = useRef({count:0,last:0});
+  const hiddenLogin = () => {
+    const now=Date.now();
+    taps.current={count:now-taps.current.last<1500?taps.current.count+1:1,last:now};
+    if(taps.current.count>=5){taps.current.count=0;void router.navigate({to:"/admin-login"});}
+  };
 
   const loadAccounts = async () => {
     const token = getGateToken();
@@ -56,12 +50,6 @@ function AuthPage() {
       void router.navigate({ to: "/gate", replace: true });
       return;
     }
-    if (r.accounts.length === 0) {
-      await bootstrapAdmin();
-      const retry = await fetchAccounts({ data: { token } });
-      setAccounts((retry.accounts as Profile[]) ?? []);
-      return;
-    }
     setAccounts(r.accounts as Profile[]);
   };
 
@@ -72,7 +60,7 @@ function AuthPage() {
   const submit = async (value: string) => {
     if (!selected) return;
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signedIn, error } = await supabase.auth.signInWithPassword({
       email: slugToEmail(selected.slug),
       password: pinToPassword(value),
     });
@@ -82,9 +70,11 @@ function AuthPage() {
       toast.error("パスワードが違います");
       return;
     }
+    const {data:adminAccount}=await supabase.rpc("is_admin_account",{_id:signedIn.user?.id ?? ""});
+    if(adminAccount){await supabase.auth.signOut();setBusy(false);setPin("");toast.error("この画面ではログインできません");return;}
     const pinRes = await supabase.rpc("set_my_pin", { _pin: value });
     if (pinRes.error) console.error("set_my_pin", pinRes.error.message);
-    const { data: settings } = await supabase.from("app_settings").select("password_skip_days").maybeSingle();
+    const { data: settings } = await supabase.from("app_settings").select("password_skip_days").eq("user_id",signedIn.user?.id ?? "").maybeSingle();
     rememberLogin(settings?.password_skip_days ?? 0);
     await refresh();
     setBusy(false);
@@ -103,7 +93,7 @@ function AuthPage() {
     <div className="min-h-screen bg-background">
       <header className="app-header text-primary-foreground shadow-md">
         <div className="mx-auto max-w-md px-4 py-5">
-          <h1 className="text-2xl font-bold tracking-wide">業務管理</h1>
+          <h1 className="text-2xl font-bold"><Button variant="ghost" className="h-auto p-0 text-2xl font-bold text-primary-foreground" onClick={hiddenLogin}>業務管理</Button></h1>
         </div>
       </header>
       <main className="mx-auto max-w-md px-4 pb-16 pt-6">
