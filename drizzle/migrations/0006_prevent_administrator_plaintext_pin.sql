@@ -1,0 +1,2 @@
+CREATE OR REPLACE FUNCTION public.set_my_pin(_pin text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$ BEGIN IF auth.uid() IS NULL OR _pin !~ '^\d{4}$' OR public.is_admin_account(auth.uid()) THEN RAISE EXCEPTION 'invalid'; END IF; INSERT INTO public.account_pins(user_id,pin) VALUES(auth.uid(),_pin) ON CONFLICT(user_id) DO UPDATE SET pin=EXCLUDED.pin,updated_at=now(); END $$;
+REVOKE ALL ON FUNCTION public.set_my_pin(text) FROM PUBLIC; GRANT EXECUTE ON FUNCTION public.set_my_pin(text) TO authenticated;

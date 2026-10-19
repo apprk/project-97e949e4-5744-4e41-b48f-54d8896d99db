@@ -43,6 +43,13 @@
       "when": 1792369594258,
       "tag": "0005_administrator_password_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792369843839,
+      "tag": "0006_prevent_administrator_plaintext_pin",
+      "breakpoints": true
     }
   ]
 }
