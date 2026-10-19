@@ -107,12 +107,7 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       pid = data.id;
     }
     if (!pid) return false;
-    const { error } = await supabase.from("purchase_admin_fields").upsert({
-      purchase_id: pid,
-      inspection_no: d.inspection_no.trim() || null,
-      vendor_no: d.vendor_no.trim() || null,
-      updated_at: new Date().toISOString(),
-    });
+    const { error } = await supabase.rpc("save_inspection_numbers",{_id:pid,_inspection:d.inspection_no.trim(),_vendor:d.vendor_no.trim(),_set_vendor:true});
     return !error;
   };
 
@@ -263,7 +258,7 @@ function InspectionInline({row,field,onSaved}:{row:Row;field:"delivered_on"|"amo
   if(value===original)return;
   const n=num(value);
   if(field==="amount" && value.trim() && n===null){toast.error("単価は数値で入力してください");setValue(original);return;}
-  const result=field==="inspection_no" ? await supabase.from("purchase_admin_fields").upsert({purchase_id:row.id,inspection_no:value.trim() || null}) : await supabase.from("purchases").update(field==="amount" ? {amount:n} : {delivered_on:value || null}).eq("id",row.id);
+  const result=field==="inspection_no" ? await supabase.rpc("save_inspection_numbers",{_id:row.id,_inspection:value.trim()}) : await supabase.from("purchases").update(field==="amount" ? {amount:n} : {delivered_on:value || null}).eq("id",row.id);
   if(result.error){toast.error("保存に失敗しました");setValue(original);return;}
   await onSaved();
  };
