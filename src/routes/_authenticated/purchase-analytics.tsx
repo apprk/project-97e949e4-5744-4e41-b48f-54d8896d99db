@@ -142,6 +142,26 @@ function AnalyticsPage() {
           </>
         )}
       </main>
+      <Dialog open={supplierOpen} onOpenChange={setSupplierOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>分析対象の業者</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">チェックを外した業者は、すべての分析結果から除外されます。履歴データ自体は変更されません。</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setExcluded(new Set())}>すべて選択</Button>
+            <Button size="sm" variant="outline" onClick={() => setExcluded(new Set(suppliers))}>すべて解除</Button>
+          </div>
+          <ul className="divide-y divide-border">
+            {suppliers.map((name) => (
+              <li key={name}>
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+                  <input type="checkbox" className="size-5 accent-primary" checked={!excluded.has(name)} onChange={() => toggleSupplier(name)} aria-label={`${name}を分析対象に含める`} />
+                  <span className="break-words">{name}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
