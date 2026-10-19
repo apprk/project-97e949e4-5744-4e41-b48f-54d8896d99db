@@ -163,7 +163,7 @@ export function AccountModes() {
                 onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
               />
             </div>
-            <div className="mt-2 flex items-center gap-2 text-sm">
+            {!a.admin ? <div className="mt-2 flex items-center gap-2 text-sm">
               <span className="shrink-0 text-muted-foreground">4桁パスワード：</span>
               {pinEdit[a.id] !== undefined ? (
                 <>
@@ -177,7 +177,7 @@ export function AccountModes() {
                   <Button size="sm" variant="outline" className="h-8 bg-card" onClick={() => setPinEdit({ ...pinEdit, [a.id]: "" })}>変更</Button>
                 </>
               )}
-            </div>
+            </div> : null}
             {!a.admin ? (
               <div className="mt-3 space-y-2">
                 {MODES.map((m) => (

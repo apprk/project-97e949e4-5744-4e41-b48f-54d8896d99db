@@ -63,12 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPerms([]);
       return;
     }
-    const [{ data: p }, { data: roles }, { data: m }] = await Promise.all([
+    const [{ data: p }, { data: adminAllowed }, { data: m }] = await Promise.all([
       supabase.from("profiles").select("id,name,slug,workplace").eq("id", uid).maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", uid),
+      supabase.rpc("is_admin"),
       supabase.from("account_modes").select("mode").eq("user_id", uid),
     ]);
-    const admin = !!roles?.some((r) => r.role === "admin");
+    const admin = adminAllowed === true;
     setProfile((p as Profile) ?? null);
     setIsAdmin(admin);
     const granted = (m ?? []).map((x) => x.mode);

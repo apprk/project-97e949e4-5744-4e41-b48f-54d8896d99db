@@ -21,7 +21,7 @@ export const MODES: { key: ModeKey; to: string; label: string; icon: LucideIcon;
       { key: "purchases.entry", label: "記入" },
       { key: "purchases.history", label: "履歴を見る" },
       { key: "purchases.all_workplaces", label: "全職場の履歴を見る" },
-      { key: "purchases.settings", label: "物品購入設定" },
+      { key: "purchases.settings", label: "物品購入設定モード利用可" },
       { key: "purchases.workplace_edit", label: "職場修正可" },
       { key: "purchases.workplace_blank", label: "職場欄空白化" },
       { key: "purchases.estimate", label: "見積書欄表示・記入可" },
