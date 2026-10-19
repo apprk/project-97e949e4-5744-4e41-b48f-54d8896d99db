@@ -31,7 +31,7 @@ import { useAuth } from "@/lib/auth";
 import { PurchaseScroll } from "@/components/PurchaseScroll";
 import { PurchaseTransfer } from "@/components/PurchaseTransfer";
 import { fetchPurchaseRows } from "@/lib/purchase-data";
-import { purchaseTextIncludes, comparePurchaseText, workplaceChangeAllowed } from "@/lib/purchases";
+import { purchaseTextIncludes, comparePurchaseText, workplaceChangeAllowed, initialPurchaseWorkplace } from "@/lib/purchases";
 import {
   STATUS,
   copyText,
@@ -778,7 +778,7 @@ function EntryView({
   );
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingAttach[]>([]);
-  const [workplace,setWorkplace] = useState(profile?.workplace ?? "");
+  const [workplace,setWorkplace] = useState(initialPurchaseWorkplace(isAdmin, profile?.workplace));
   const [q, setQ] = useState("");
   const itemRef = useRef<HTMLInputElement>(null);
   const writerRef = useRef<HTMLInputElement>(null);
@@ -906,7 +906,7 @@ function EntryView({
     <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
       <div className="mb-2 flex items-center gap-2">
         <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => move(-1)}><ChevronLeft className="size-5" /></Button>
-        <h2 className="min-w-40 text-center text-lg font-bold">{ym.y}年{ym.m}月 物品購入</h2>
+        <h2 className="min-w-40 text-center text-lg font-bold">{ym.y}年{ym.m}月</h2>
         <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => move(1)}><ChevronRight className="size-5" /></Button>
         {!isCurrent ? <Button variant="ghost" size="sm" onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() + 1 })}>今月</Button> : null}
         <form

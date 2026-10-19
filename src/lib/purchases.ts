@@ -77,6 +77,8 @@ export function workplaceChangeAllowed(canEdit: boolean, canBlank: boolean, next
   return canEdit && (!!next.trim() || canBlank);
 }
 
+export const initialPurchaseWorkplace = (isAdmin: boolean, workplace?: string | null) => isAdmin ? "" : workplace ?? "";
+
 export function matchWriters(writers: Writer[], q: string) {
   const k = toHira(q.trim());
   if (!k) return [];

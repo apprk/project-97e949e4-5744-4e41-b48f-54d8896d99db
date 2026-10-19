@@ -1,4 +1,8 @@
 # Work
+- [ ] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace.
+- [ ] Diagnose supplier/vendor persistence across all edit paths and repair without changing unrelated rows.
+- [ ] Repair and test purchase analytics reads, inclusive delivery periods, subtotals and empty/error states.
+- [ ] Verify saved purchase changes and analytics through real UI; preserve existing data/settings.
 - [x] Upgrade equipment data without deleting existing records; preserve other modules.
 - [x] Implement maintenance date rules, continuous entry, lists, planning, grouping and admin visibility/master settings.
 - [x] Implement dated history comments and existing/device photo attachments.
