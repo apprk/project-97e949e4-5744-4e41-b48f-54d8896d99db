@@ -113,8 +113,12 @@ function sheetYear(name: string): number | null {
   return 2000 + Number(m[1]);
 }
 
-function toDateString(v: unknown, year: number): string | null {
-  if (v instanceof Date) return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
+function toDateString(v: unknown, year: number, date1904 = false): string | null {
+  if (typeof v === "number") {
+    const parsed = XLSX.SSF.parse_date_code(v, { date1904 });
+    return parsed ? `${parsed.y}-${pad2(parsed.m)}-${pad2(parsed.d)}` : null;
+  }
+  if (v instanceof Date) return `${v.getUTCFullYear()}-${pad2(v.getUTCMonth() + 1)}-${pad2(v.getUTCDate())}`;
   const s = String(v ?? "").trim();
   if (!s) return null;
   const full = s.match(/(\d{4})[/年.-](\d{1,2})[/月.-](\d{1,2})/);
@@ -128,37 +132,55 @@ function toDateString(v: unknown, year: number): string | null {
  * 「三条工場申し送りFile.xlsx」を読み込む。
  * シート名 diaryNN を西暦(20NN)として扱い、3行目以降・A〜H列を固定の対応で取り込む。
  */
-export async function parseScheduleExcel(file: File): Promise<ImportedRow[]> {
+export async function inspectScheduleExcel(file: File) {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { cellDates: true });
+  const wb = XLSX.read(buf, { cellDates: false });
   const out: ImportedRow[] = [];
+  const sheets: { name: string; scanned: number; parsed: number; blank: number; outsideYear: number; errors: string[] }[] = [];
   wb.SheetNames.forEach((name) => {
     const year = sheetYear(name);
     if (year === null || year < IMPORT_MIN_YEAR) return;
     const ws = wb.Sheets[name];
     if (!ws) return;
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, defval: null, blankrows: true });
+    const stat = { name, scanned: 0, parsed: 0, blank: 0, outsideYear: 0, errors: [] as string[] };
+    sheets.push(stat);
+    // Keep actual row numbers and raw date serials: formatted M/D hides the year.
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, range: 0, raw: true, defval: null, blankrows: true });
     const dates = daysOfYear(year);
     for (let i = DATA_START_ROW; i < aoa.length; i += 1) {
       const row = aoa[i];
       if (!row) continue;
+      stat.scanned += 1;
       // A列の日付を優先。空欄なら「3行目＝1月1日」の並び順から補完する
-      const date = toDateString(row[0], year) ?? dates[i - DATA_START_ROW] ?? null;
-      if (!date || !date.startsWith(String(year))) continue;
-      const rec: ImportedRow = { entry_date: date };
-      let has = false;
+      const emptyDate = row[0] === null || row[0] === undefined || row[0] === "";
+      const date = emptyDate ? dates[i - DATA_START_ROW] : toDateString(row[0], year, wb.Workbook?.WBProps?.date1904 === true);
+      const rec: ImportedRow = { entry_date: date ?? "" };
       FIELD_BY_COLUMN.forEach((field, col) => {
         if (!field) return;
-        const val = String(row[col] ?? "").trim();
+        const address = XLSX.utils.encode_cell({ r: i, c: col });
+        const val = String(ws[address] ? XLSX.utils.format_cell(ws[address]) : row[col] ?? "").trim();
         if (val) {
           rec[field] = val;
-          has = true;
         }
       });
-      if (has) out.push(rec);
+      if (Object.keys(rec).length === 1) { stat.blank += 1; continue; }
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+        stat.errors.push(`${name} ${i + 1}行目：日付を判定できません`);
+        continue;
+      }
+      if (!date.startsWith(String(year))) { stat.outsideYear += 1; continue; }
+      out.push(rec);
+      stat.parsed += 1;
     }
   });
-  return out;
+  return { rows: out.sort((a, b) => a.entry_date.localeCompare(b.entry_date)), sheets };
+}
+
+export async function parseScheduleExcel(file: File): Promise<ImportedRow[]> {
+  const result = await inspectScheduleExcel(file);
+  const errors = result.sheets.flatMap(sheet => sheet.errors);
+  if (errors.length) throw new Error(errors.join("\n"));
+  return result.rows;
 }
 
 export function exportCsv(headers: string[], rows: (string | number | null | undefined)[][], fileName: string) {
