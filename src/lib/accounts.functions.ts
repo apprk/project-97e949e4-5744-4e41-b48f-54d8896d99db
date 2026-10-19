@@ -2,6 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+export const createAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d)=>z.object({name:z.string().trim().min(1).max(100),slug:z.string().regex(/^[a-z0-9_-]{2,20}$/),pin:z.string().regex(/^\d{4}$/)}).parse(d))
+  .handler(async ({data,context})=>{
+    const {data:allowed,error:permissionError}=await context.supabase.rpc("has_perm",{_perm:"accounts.manage"});
+    if(permissionError || !allowed)throw new Error("Forbidden");
+    const {supabaseAdmin}=await import("@/integrations/supabase/client.server");
+    const {data:created,error}=await supabaseAdmin.auth.admin.createUser({email:`${data.slug}@sanjo.local`,password:`sanjo-${data.pin}`,email_confirm:true,user_metadata:{name:data.name,slug:data.slug}});
+    if(error || !created.user)throw new Error("追加に失敗しました（IDが重複している可能性があります）");
+    const {error:pinError}=await supabaseAdmin.from("account_pins").upsert({user_id:created.user.id,pin:data.pin});
+    if(pinError)throw new Error("アカウントを追加しましたが、パスワード一覧への記録に失敗しました");
+    return {ok:true};
+  });
+
 async function assertAdmin(supabase: { rpc: (fn: "is_admin") => PromiseLike<{ data: unknown }> }) {
   const { data } = await supabase.rpc("is_admin");
   if (!data) throw new Error("Forbidden");

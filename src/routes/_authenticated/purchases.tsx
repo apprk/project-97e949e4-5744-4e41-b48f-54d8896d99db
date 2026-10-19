@@ -469,6 +469,7 @@ function PurchaseTable({
                   if (COPYABLE.has(k)) {
                     return (
                       <td
+                        data-purchase-cell={`${p.id}:${k}`}
                         key={k}
                         title={t ? "クリックでコピー" : undefined}
                         onClick={() => copyCell(t)}

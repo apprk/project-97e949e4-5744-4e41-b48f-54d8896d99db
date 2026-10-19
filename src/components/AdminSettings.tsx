@@ -12,7 +12,7 @@ import { FEATURES, MODES } from "@/lib/modes";
 import { useAuth } from "@/lib/auth";
 import { getGateId, updateGate } from "@/lib/gate.functions";
 import { disableAccount, resetAccountPin } from "@/lib/accounts.functions";
-import type { Writer } from "@/lib/purchases";
+import { toHira, type Writer } from "@/lib/purchases";
 
 const card = "rounded-2xl border border-border bg-card p-4";
 
