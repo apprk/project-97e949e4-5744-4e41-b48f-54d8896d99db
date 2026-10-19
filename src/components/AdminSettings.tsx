@@ -87,13 +87,15 @@ export function AccountModes() {
         workplace: p.workplace,
         pin: pins?.find((x) => x.user_id === p.id)?.pin ?? null,
         admin: !!roles?.some((r) => r.user_id === p.id && r.role === "admin"),
-        modes: (ms ?? []).filter((m) => m.user_id === p.id).map((m) => m.mode),
+        modes: (()=>{const keys=(ms ?? []).filter((m)=>m.user_id===p.id).map((m)=>m.mode);if(keys.some((k)=>["settings.writers","settings.suppliers","settings.analytics"].includes(k)))keys.push("purchases.settings");return keys;})(),
       })),
     );
   };
   useEffect(() => { void load(); }, []);
 
   const toggle = async (a: Acc, mode: string, on: boolean) => {
+    if(!isAdmin)return;
+    if(mode==="purchases.settings" && !on){const {error}=await supabase.from("account_modes").delete().eq("user_id",a.id).in("mode",["purchases.settings","settings.writers","settings.suppliers","settings.analytics"]);if(error)toast.error("変更に失敗しました");void load();return;}
     const { error } = on
       ? await supabase.from("account_modes").insert({ user_id: a.id, mode })
       : await supabase.from("account_modes").delete().eq("user_id", a.id).eq("mode", mode);
