@@ -34,9 +34,15 @@ export function SupplierInput({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const currentValue = useRef(value);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  currentValue.current = value;
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
   const list = useMemo(() => matchSuppliers(suppliers, value), [suppliers, value]);
-  const show = open && list.length > 0 && !(list.length === 1 && list[0]!.name === value);
+  const show = open && list.length > 0 && !(list.length === 1 && list[0]?.name === value);
   const pick = (v: string) => {
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    currentValue.current = v;
     onChange(v);
     setOpen(false);
     onCommit?.(v);
@@ -49,20 +55,21 @@ export function SupplierInput({
         aria-label="発注先"
         value={value}
         onChange={(e) => {
+          currentValue.current = e.target.value;
           onChange(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() =>
-          setTimeout(() => {
+        onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); setOpen(true); }}
+        onBlur={() => {
+          blurTimer.current = setTimeout(() => {
             setOpen(false);
-            onCommit?.(value);
-          }, 150)
-        }
+            onCommit?.(currentValue.current);
+          }, 150);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            if (show) pick(list[0]!.name);
+            if (show && list[0]) pick(list[0].name);
             else (e.target as HTMLInputElement).blur();
           }
         }}

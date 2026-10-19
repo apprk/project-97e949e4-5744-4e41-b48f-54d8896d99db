@@ -107,7 +107,10 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       pid = data.id;
     }
     if (!pid) return false;
-    const { error } = await supabase.rpc("save_inspection_numbers",{_id:pid,_inspection:d.inspection_no.trim(),_vendor:d.vendor_no.trim(),_set_vendor:true});
+    // Supplier changes are resolved atomically by the existing database trigger.
+    // Do not overwrite that value with a draft loaded before the supplier change.
+    const supplierChanged = !id || (rows?.find((r) => r.id === id)?.supplier ?? "").trim() !== d.supplier.trim();
+    const { error } = await supabase.rpc("save_inspection_numbers",{_id:pid,_inspection:d.inspection_no.trim(),_vendor:d.vendor_no.trim(),_set_vendor:!supplierChanged});
     return !error;
   };
 
