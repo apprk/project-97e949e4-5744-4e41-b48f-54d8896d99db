@@ -60,7 +60,8 @@ function AnalyticsPage() {
     return () => { active = false; };
   }, [revision]);
 
-  const { bySupplier, total, trend, datedCount, pricedCount } = useMemo(() => aggregatePurchases(rows ?? [], from, to, unit), [rows, from, to, unit]);
+  const filtered = useMemo(() => (rows ?? []).filter((r) => !excluded.has(supplierName(r))), [rows, excluded]);
+  const { bySupplier, total, trend, datedCount, pricedCount } = useMemo(() => aggregatePurchases(filtered, from, to, unit), [filtered, from, to, unit]);
   const invalidPeriod = !!from && !!to && from > to;
   const emptyMessage = datedCount === 0 ? "対象データがありません。" : "対象期間の納品データはありますが、単価または数量が未入力のため集計できません。";
 
