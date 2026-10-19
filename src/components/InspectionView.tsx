@@ -177,7 +177,7 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
     <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
       <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
         <h2 className="text-lg font-bold">発注検収</h2>
-        <span className="text-muted-foreground">🟢 承認済 {rows?.length ?? 0}件</span>
+        <span className="text-muted-foreground">{view.length}件</span>
         <div className="ml-auto flex flex-wrap gap-2">
           <select aria-label="発注検収状態" className="h-10 rounded-md border border-input bg-background px-2" value={withDelivered ? "both" : "approved"} onChange={(e)=>setWithDelivered(e.target.value==="both")}><option value="approved">承認済のみ</option><option value="both">承認済＆納品済</option></select>
           <select aria-label="検収番号の絞り込み" className="h-10 rounded-md border border-input bg-background px-2" value={numberFilter} onChange={(e)=>setNumberFilter(e.target.value)}><option value="all">記載済＆未記載</option><option value="numbered">記載済のみ</option><option value="missing">未記載のみ</option></select>

@@ -254,7 +254,7 @@ export function WriterMaster() {
       <div className="px-3 pb-3">
       <Input className="mb-2 h-10" placeholder="一覧から探す（氏名・ふりがな）" value={filter} onChange={(e) => setFilter(e.target.value)} />
       <ul className="max-h-80 space-y-2 overflow-auto">
-        {list.filter((w) => !filter || w.name.includes(filter) || w.kana.includes(filter)).map((w) => (
+        {list.filter((w) => !filter || toHira(w.name).includes(toHira(filter)) || toHira(w.kana).includes(toHira(filter))).map((w) => (
           <li key={w.id} className="flex items-center gap-2">
             <Input className="h-10" defaultValue={w.name} aria-label="氏名" onBlur={(e) => e.target.value.trim() && e.target.value !== w.name && upd(w, { name: e.target.value.trim() })} />
             <Input className="h-10" defaultValue={w.kana} aria-label="ふりがな" onBlur={(e) => e.target.value.trim() && e.target.value !== w.kana && upd(w, { kana: e.target.value.trim() })} />
@@ -327,7 +327,7 @@ export function SupplierMaster() {
         <div className="px-3 pb-3">
           <Input className="mb-2 h-10" placeholder="一覧から探す" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <ul className="max-h-80 space-y-2 overflow-auto">
-            {list.filter((s) => !filter || s.name.includes(filter) || s.vendor_no.includes(filter)).map((s) => (
+            {list.filter((s) => !filter || toHira(s.name).includes(toHira(filter)) || toHira(s.vendor_no).includes(toHira(filter))).map((s) => (
               <li key={s.id} className="flex items-center gap-2">
                 <Input className="h-10" defaultValue={s.name} aria-label="発注先名" onBlur={(e) => e.target.value.trim() && e.target.value !== s.name && upd(s, { name: e.target.value.trim() })} />
                 <Input className="h-10 w-24 shrink-0" defaultValue={s.vendor_no} aria-label="業者番号" onBlur={(e) => e.target.value !== s.vendor_no && upd(s, { vendor_no: e.target.value.trim() })} />
