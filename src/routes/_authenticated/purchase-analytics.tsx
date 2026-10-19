@@ -42,6 +42,12 @@ function AnalyticsPage() {
   const [rows, setRows] = useState<Purchase[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+
+  const supplierName = (r: Purchase) => r.supplier?.trim() || "（未入力）";
+  const suppliers = useMemo(() => [...new Set((rows ?? []).map(supplierName))].sort((a, b) => a.localeCompare(b, "ja")), [rows]);
+  const toggleSupplier = (name: string) => setExcluded((prev) => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; });
 
   useEffect(() => {
     setRows(null);
