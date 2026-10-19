@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import { TABLE_SCROLL } from "@/lib/purchases";
 
 /** One native horizontal track shared with the table, pinned to the viewport. */
-export function PurchaseScroll({ children, scrollRef }: { children: ReactNode; scrollRef?: RefObject<HTMLDivElement | null> }) {
+export function PurchaseScroll({ children, scrollRef }: { children: ReactNode; scrollRef?: RefObject<HTMLDivElement | null> | undefined }) {
   const localTable = useRef<HTMLDivElement>(null);
   const table = scrollRef ?? localTable;
   const track = useRef<HTMLDivElement>(null);
