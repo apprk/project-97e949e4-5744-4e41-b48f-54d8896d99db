@@ -79,6 +79,10 @@ export function workplaceChangeAllowed(canEdit: boolean, canBlank: boolean, next
 
 export const initialPurchaseWorkplace = (isAdmin: boolean, workplace?: string | null) => isAdmin ? "" : workplace ?? "";
 
+/** A supplier change must retain the number freshly resolved by the database. */
+export const preserveDerivedVendor = (isNew: boolean, previous: string | null | undefined, next: string) =>
+  isNew || (previous ?? "").trim() !== next.trim();
+
 export function matchWriters(writers: Writer[], q: string) {
   const k = toHira(q.trim());
   if (!k) return [];
