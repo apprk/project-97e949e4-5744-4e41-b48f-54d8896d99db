@@ -611,9 +611,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      import_purchases: { Args: { _rows: Json }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       mark_purchase_checked: { Args: { _id: string }; Returns: undefined }
       my_workplace: { Args: never; Returns: string }
+      purchase_rows: { Args: never; Returns: Json }
+      purchase_visible: { Args: { _id: string }; Returns: boolean }
+      save_purchase_estimate: {
+        Args: { _id: string; _value: string }
+        Returns: undefined
+      }
       set_my_pin: { Args: { _pin: string }; Returns: undefined }
     }
     Enums: {

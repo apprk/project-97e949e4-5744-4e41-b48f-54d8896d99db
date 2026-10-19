@@ -15,6 +15,13 @@
       "when": 1791245292318,
       "tag": "0001_app_wide_perms_admin_blank_workplace",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792368646819,
+      "tag": "0002_purchase_permissions_transfer",
+      "breakpoints": true
     }
   ]
 }
