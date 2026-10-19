@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Image, Paperclip, Plus, Save, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Image, Paperclip, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -32,8 +32,27 @@ export function HistoryPanel({ record, history, reload }: { record: Maintenance;
   const [preview,setPreview]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [loadingPhotos,setLoadingPhotos]=useState(false);
+  const [expanded,setExpanded]=useState(false);
+  const [planned,setPlanned]=useState(record.planned_on??"");
+  const [plannedBusy,setPlannedBusy]=useState(false);
   const fileRef=useRef<HTMLInputElement>(null);
   const own=history.filter(h=>h.equipment_id===record.id);
+  const sortedOwn=[...own].sort((a,b)=>(descending?-1:1)*(new Date(a.performed_on).getTime()-new Date(b.performed_on).getTime())||a.id.localeCompare(b.id));
+  const latestByDate=own.length?[...own].sort((a,b)=>new Date(b.performed_on).getTime()-new Date(a.performed_on).getTime()||b.id.localeCompare(a.id))[0]:null;
+  const visibleHistory=expanded?sortedOwn:latestByDate?[latestByDate]:[];
+  const savePlanned=async()=>{
+    setPlannedBusy(true);
+    const {data,error}=await supabase.from("equipment").update({planned_on:planned||null}).eq("id",record.id).select("id");
+    if(error||!data?.length)toast.error("予定日を保存できませんでした");else{await reload();toast.success("予定日を保存しました");}
+    setPlannedBusy(false);
+  };
+  const removeHistory=async(h:Completion)=>{
+    if(!confirm(`${h.performed_on}の実施履歴を削除しますか？添付写真との関連も解除されます。`))return;
+    setBusy(true);
+    const {data,error}=await supabase.from("equipment_history").update({deleted_at:new Date().toISOString()}).eq("id",h.id).eq("equipment_id",record.id).select("id");
+    if(error||!data?.length)toast.error("削除できませんでした");else{if(editing===h.id){setEditing(null);setDate(japanToday());setComment("");}await reload();toast.success("実施履歴を削除しました");}
+    setBusy(false);
+  };
   const loadAttachments=async()=>{
     const rows=own.length ? await readAllPages<Attachment>((from,to)=>supabase.from("equipment_history_attachments").select("id,history_id,storage_path,photo_id").in("history_id",own.map(h=>h.id)).order("id").range(from,to)) : [];
     setAttachments(rows);
@@ -94,9 +113,11 @@ export function HistoryPanel({ record, history, reload }: { record: Maintenance;
     }finally{setBusy(false);}
   };
   return <section className="space-y-4">
-    <div className="flex items-center justify-between gap-2"><h3 className="font-bold">実施履歴（{own.length}件）</h3><Button variant="outline" size="sm" onClick={()=>setDescending(!descending)}>{descending?"新しい順":"古い順"}</Button></div>
+    <div className="space-y-1"><Label htmlFor={`planned-${record.id}`}>予定日</Label><div className="flex gap-2"><Input id={`planned-${record.id}`} type="date" className="max-w-56" value={planned} onChange={e=>setPlanned(e.target.value)}/><Button variant="outline" size="sm" className="self-center" disabled={plannedBusy||planned===(record.planned_on??"")} onClick={()=>void savePlanned()}>{plannedBusy?"保存中…":"予定日を保存"}</Button></div></div>
+    <div className="flex items-center justify-between gap-2"><Button variant="ghost" className="-ml-2 font-bold" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}>{expanded?<ChevronUp className="size-4"/>:<ChevronDown className="size-4"/>}実施履歴（{own.length}件）</Button>{expanded?<Button variant="outline" size="sm" onClick={()=>setDescending(!descending)}>{descending?"新しい順":"古い順"}</Button>:null}</div>
+    {!expanded&&own.length>1?<p className="text-xs text-muted-foreground">直近の履歴のみ表示中。見出しをタップすると全件表示します。</p>:null}
     <div className="divide-y divide-border">
-      {[...own].sort((a,b)=>(descending?-1:1)*(new Date(a.performed_on).getTime()-new Date(b.performed_on).getTime())||a.id.localeCompare(b.id)).map(h=><div key={h.id} className="py-3"><div className="flex items-start justify-between gap-2"><div><p className="font-medium">{h.performed_on}</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{h.comment}</p></div><Button variant="outline" size="sm" disabled={busy} onClick={()=>{setEditing(h.id);setDate(h.performed_on);setComment(h.comment??"");}}>編集</Button></div><div className="mt-2 flex flex-wrap gap-2">{attachments.filter(a=>a.history_id===h.id).map(a=><Button key={a.id} variant="outline" className="h-20 w-20 overflow-hidden p-0" aria-label={`${h.performed_on}の写真`} onClick={()=>setPreview(urls[a.id]??null)}>{urls[a.id]?<img src={urls[a.id]} alt={`${h.performed_on}の添付写真`} className="h-full w-full object-contain"/>:<Image className="size-5"/>}</Button>)}</div></div>)}
+      {visibleHistory.map(h=><div key={h.id} className="py-3"><div className="flex items-start justify-between gap-2"><div><p className="font-medium">{h.performed_on}</p><p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{h.comment}</p></div><div className="flex shrink-0 gap-1"><Button variant="outline" size="sm" disabled={busy} onClick={()=>{setEditing(h.id);setDate(h.performed_on);setComment(h.comment??"");}}>編集</Button><Button variant="outline" size="icon" title="この履歴を削除" aria-label={`${h.performed_on}の履歴を削除`} disabled={busy} onClick={()=>void removeHistory(h)}><Trash2 className="size-4"/></Button></div></div><div className="mt-2 flex flex-wrap gap-2">{attachments.filter(a=>a.history_id===h.id).map(a=><Button key={a.id} variant="outline" className="h-20 w-20 overflow-hidden p-0" aria-label={`${h.performed_on}の写真`} onClick={()=>setPreview(urls[a.id]??null)}>{urls[a.id]?<img src={urls[a.id]} alt={`${h.performed_on}の添付写真`} className="h-full w-full object-contain"/>:<Image className="size-5"/>}</Button>)}</div></div>)}
     </div>
     <div className="border-t border-border pt-4"><h3 className="mb-3 font-bold">{editing?"実施履歴を編集":"実施日を追加"}</h3><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label htmlFor={`history-date-${record.id}`}>実施日</Label><Input id={`history-date-${record.id}`} type="date" value={date} onChange={e=>setDate(e.target.value)}/></div><div className="space-y-1"><Label htmlFor={`history-comment-${record.id}`}>一言コメント</Label><Input id={`history-comment-${record.id}`} value={comment} onChange={e=>setComment(e.target.value)}/></div></div>
     <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={()=>fileRef.current?.click()}><Paperclip className="size-4"/>端末の写真</Button><Button variant="outline" onClick={()=>void openLibrary()}><Image className="size-4"/>アプリ内の写真</Button></div>
