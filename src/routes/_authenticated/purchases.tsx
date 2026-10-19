@@ -267,7 +267,7 @@ function PurchaseTable({
     await Promise.all(chunks.map(async (c) => {
       const [{ data: at }, adm] = await Promise.all([
         supabase.from("purchase_attachments").select("id,purchase_id,storage_path,photo_id").in("purchase_id", c).is("deleted_at", null).order("created_at"),
-        isAdmin ? supabase.from("purchase_admin_fields").select("purchase_id,estimate_no").in("purchase_id", c) : Promise.resolve({ data: [] as { purchase_id: string; estimate_no: string | null }[] }),
+        can("purchases.estimate") ? supabase.from("purchase_admin_fields").select("purchase_id,estimate_no").in("purchase_id", c) : Promise.resolve({ data: [] as { purchase_id: string; estimate_no: string | null }[] }),
       ]);
       (at ?? []).forEach((x) => { (a[x.purchase_id] ??= []).push(x as Attachment); });
       (adm.data ?? []).forEach((x) => { if (x.estimate_no) e[x.purchase_id] = x.estimate_no; });

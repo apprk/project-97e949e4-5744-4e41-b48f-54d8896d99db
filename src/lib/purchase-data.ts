@@ -5,5 +5,6 @@ import type { Purchase } from "@/lib/purchases";
 export async function fetchPurchaseRows(): Promise<Purchase[]> {
   const { data, error } = await supabase.rpc("purchase_rows");
   if (error) throw error;
-  return (data ?? []) as unknown as Purchase[];
+  const rows=(data ?? []) as unknown as Purchase[];
+  return rows.sort((a,b)=>a.written_on.localeCompare(b.written_on) || a.created_at.localeCompare(b.created_at));
 }
