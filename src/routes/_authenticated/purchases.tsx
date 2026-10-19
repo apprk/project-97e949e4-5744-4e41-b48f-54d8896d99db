@@ -30,6 +30,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuth } from "@/lib/auth";
 import { PurchaseScroll } from "@/components/PurchaseScroll";
 import { PurchaseTransfer } from "@/components/PurchaseTransfer";
+import { PurchasePeriodControls, PurchasePeriodLabel, usePurchasePeriod } from "@/components/PurchasePeriod";
+import { matchesPurchasePeriod } from "@/lib/purchase-period";
+import { usePurchaseBottom } from "@/hooks/use-purchase-bottom";
 import { fetchPurchaseRows } from "@/lib/purchase-data";
 import { purchaseTextIncludes, comparePurchaseText, workplaceChangeAllowed, initialPurchaseWorkplace } from "@/lib/purchases";
 import {
@@ -240,7 +243,9 @@ function PurchaseTable({
   onBulkCopy,
   suppliers,
   highlight,
+  scrollRef,
 }: {
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
   highlight?: { id: string; key: ColKey } | undefined;
   suppliers: Supplier[];
   rows: Purchase[];
@@ -378,7 +383,7 @@ function PurchaseTable({
   );
 
   return (
-    <PurchaseScroll>
+    <PurchaseScroll scrollRef={scrollRef}>
       <table className="w-max min-w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-secondary text-secondary-foreground">
           <tr>
@@ -769,6 +774,7 @@ function EntryView({
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
   const [rows, setRows] = useState<Purchase[] | null>(null);
   // 記載者はこの記入画面を開いている間だけ引き継ぐ（画面を閉じると消える）
+  const { scrollRef } = usePurchaseBottom(rows !== null);
   const [writer, setWriter] = useState(initialPaste?.writer ?? "");
   const blank = { item_name: "", model: "", note: "", quantity: "", unit: "" };
   const [draft, setDraft] = useState(
@@ -904,7 +910,7 @@ function EntryView({
 
   return (
     <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <Button variant="outline" size="icon" className="bg-card" aria-label="前の月" onClick={() => move(-1)}><ChevronLeft className="size-5" /></Button>
         <h2 className="min-w-40 text-center text-lg font-bold">{ym.y}年{ym.m}月</h2>
         <Button variant="outline" size="icon" className="bg-card" aria-label="次の月" onClick={() => move(1)}><ChevronRight className="size-5" /></Button>
@@ -924,7 +930,7 @@ function EntryView({
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
         <>
-          <PurchaseTable rows={rows} cols={cols} reload={load} footer={footer} onBulkCopy={onBulkCopy} suppliers={suppliers} />
+          <PurchaseTable scrollRef={scrollRef} rows={rows} cols={cols} reload={load} footer={footer} onBulkCopy={onBulkCopy} suppliers={suppliers} />
           {rows.length === 0 ? <p className="mt-2 text-xs text-muted-foreground">この月の依頼はまだありません。一番下の行に入力してください。</p> : null}
           <p className="mt-2 text-xs text-muted-foreground">記載者・品名・型式・備考・数量・単位はタップするとコピーできます。</p>
         </>
@@ -939,8 +945,11 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
   const { isAdmin, can } = useAuth();
   const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(can("purchases.estimate"),can("purchases.status")), ...tailCols(can("purchases.fulfillment")), "tools"];
   const [rows, setRows] = useState<Purchase[] | null>(null);
-  const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" };
+  const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", status: "" };
   const [f, setF] = useState(empty);
+  const periodControl = usePurchasePeriod();
+  const { period } = periodControl;
+  const { scrollRef, scrollToBottom } = usePurchaseBottom(rows !== null);
   // 記入画面と同じく古いものが上
   const [sort, setSort] = useState<{ key: ColKey; dir: 1 | -1 }>({ key: "written_on", dir: 1 });
 
@@ -960,7 +969,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
       (r) =>
         (!f.workplace || r.workplace === f.workplace) &&
         has(r.writer, f.writer) && has(r.item_name, f.item) && has(r.model, f.model) && has(r.supplier, f.supplier) &&
-        (!f.from || r.written_on >= f.from) && (!f.to || r.written_on <= f.to) &&
+        matchesPurchasePeriod(r.written_on, period) &&
         (!f.status || r.status === f.status),
     );
     const val = (r: Purchase): string | number => {
@@ -979,7 +988,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
       const c = typeof x === "number" && typeof y === "number" ? x - y : comparePurchaseText(String(x),String(y));
       return c * sort.dir;
     });
-  }, [rows, f, sort]);
+  }, [rows, f, sort, period]);
 
   const onSort = (k: ColKey) => setSort((s) => (s.key === k ? { key: k, dir: (s.dir * -1) as 1 | -1 } : { key: k, dir: 1 }));
   const inp = (k: keyof typeof f, ph: string) => (
@@ -996,7 +1005,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
   const advance=(d:number)=>setMatchIndex((i)=>matches.length ? (i+d+matches.length)%matches.length : -1);
   return (
     <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
-      <div className="mb-2 flex items-center gap-2"><Search className="size-4"/><Input aria-label="履歴内検索" placeholder="履歴内検索" value={word} onChange={(e)=>setWord(e.target.value)} onKeyDown={(e)=>e.key==="Enter" && advance(e.shiftKey ? -1 : 1)} className="max-w-sm"/><Button size="icon" variant="outline" aria-label="前の検索結果" disabled={!matches.length} onClick={()=>advance(-1)}><ChevronLeft className="size-4"/></Button><Button size="icon" variant="outline" aria-label="次の検索結果" disabled={!matches.length} onClick={()=>advance(1)}><ChevronRight className="size-4"/></Button><span className="whitespace-nowrap text-xs">{matchIndex+1}/{matches.length}</span></div>
+      <div className="mb-2 flex flex-wrap items-center gap-2"><Search className="size-4"/><Input aria-label="履歴内検索" placeholder="履歴内検索" value={word} onChange={(e)=>setWord(e.target.value)} onKeyDown={(e)=>e.key==="Enter" && advance(e.shiftKey ? -1 : 1)} className="w-40 flex-1 sm:max-w-sm"/><Button size="icon" variant="outline" aria-label="前の検索結果" disabled={!matches.length} onClick={()=>advance(-1)}><ChevronLeft className="size-4"/></Button><Button size="icon" variant="outline" aria-label="次の検索結果" disabled={!matches.length} onClick={()=>advance(1)}><ChevronRight className="size-4"/></Button><span className="whitespace-nowrap text-xs">{matchIndex+1}/{matches.length}</span><Button variant="ghost" size="sm" className="ml-auto text-xs text-muted-foreground" onClick={scrollToBottom}><ArrowDown className="size-3"/>ページ下部へ</Button></div>
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-4 lg:grid-cols-8">
         <select className={selectCls} value={f.workplace} onChange={(e) => setF({ ...f, workplace: e.target.value })} aria-label="職場">
           <option value="">職場：すべて</option>
@@ -1006,8 +1015,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
         {inp("item", "品名")}
         {inp("model", "型式")}
         {isAdmin ? inp("supplier", "発注先") : null}
-        <Input className="h-10 text-sm" type="date" aria-label="期間（開始）" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
-        <Input className="h-10 text-sm" type="date" aria-label="期間（終了）" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
+        <PurchasePeriodControls control={periodControl} dates={(rows ?? []).map((r) => r.written_on)} />
         <select className={selectCls} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} aria-label="状態">
           <option value="">状態：すべて</option>
           {(Object.keys(STATUS) as PurchaseStatus[]).map((s) => <option key={s} value={s}>{statusText(s)}</option>)}
@@ -1015,6 +1023,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
         <span>{view.length}件</span>
+        <PurchasePeriodLabel period={period}/>
         {Object.values(f).some(Boolean) ? (
           <Button size="sm" variant="ghost" onClick={() => setF(empty)}>条件をクリア</Button>
         ) : null}
@@ -1025,7 +1034,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <PurchaseTable highlight={hit} rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} suppliers={suppliers} />
+        <PurchaseTable scrollRef={scrollRef} highlight={hit} rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} suppliers={suppliers} />
       )}
     </main>
   );
