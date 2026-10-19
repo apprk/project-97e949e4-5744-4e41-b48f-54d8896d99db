@@ -16,6 +16,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "アカウントを選んで4桁パスワードでログインします。" },
       { property: "og:title", content: "ログイン | 三条工場 業務管理" },
       { property: "og:description", content: "アカウントを選んで4桁パスワードでログインします。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,

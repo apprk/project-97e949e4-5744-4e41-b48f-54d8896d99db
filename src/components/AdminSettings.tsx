@@ -12,7 +12,7 @@ import { FEATURES, MODES } from "@/lib/modes";
 import { useAuth } from "@/lib/auth";
 import { getGateId, updateGate } from "@/lib/gate.functions";
 import { disableAccount, resetAccountPin } from "@/lib/accounts.functions";
-import type { Writer } from "@/lib/purchases";
+import { toHira, type Writer } from "@/lib/purchases";
 
 const card = "rounded-2xl border border-border bg-card p-4";
 
@@ -75,9 +75,9 @@ export function AccountModes() {
   const load = async () => {
     const [{ data: ps }, { data: roles }, { data: ms }, { data: pins }] = await Promise.all([
       supabase.from("profiles").select("id,name,slug,workplace").is("disabled_at", null).order("created_at"),
-      supabase.from("user_roles").select("user_id,role"),
-      supabase.from("account_modes").select("user_id,mode"),
-      supabase.from("account_pins").select("user_id,pin"),
+      isAdmin ? supabase.from("user_roles").select("user_id,role") : Promise.resolve({data:[]}),
+      isAdmin ? supabase.from("account_modes").select("user_id,mode") : Promise.resolve({data:[]}),
+      isAdmin ? supabase.from("account_pins").select("user_id,pin") : Promise.resolve({data:[]}),
     ]);
     setList(
       (ps ?? []).map((p) => ({
@@ -87,13 +87,15 @@ export function AccountModes() {
         workplace: p.workplace,
         pin: pins?.find((x) => x.user_id === p.id)?.pin ?? null,
         admin: !!roles?.some((r) => r.user_id === p.id && r.role === "admin"),
-        modes: (ms ?? []).filter((m) => m.user_id === p.id).map((m) => m.mode),
+        modes: (()=>{const keys=(ms ?? []).filter((m)=>m.user_id===p.id).map((m)=>m.mode);if(keys.some((k)=>["settings.writers","settings.suppliers","settings.analytics"].includes(k)))keys.push("purchases.settings");return keys;})(),
       })),
     );
   };
   useEffect(() => { void load(); }, []);
 
   const toggle = async (a: Acc, mode: string, on: boolean) => {
+    if(!isAdmin)return;
+    if(mode==="purchases.settings" && !on){const {error}=await supabase.from("account_modes").delete().eq("user_id",a.id).in("mode",["purchases.settings","settings.writers","settings.suppliers","settings.analytics"]);if(error)toast.error("変更に失敗しました");void load();return;}
     const { error } = on
       ? await supabase.from("account_modes").insert({ user_id: a.id, mode })
       : await supabase.from("account_modes").delete().eq("user_id", a.id).eq("mode", mode);
@@ -252,7 +254,7 @@ export function WriterMaster() {
       <div className="px-3 pb-3">
       <Input className="mb-2 h-10" placeholder="一覧から探す（氏名・ふりがな）" value={filter} onChange={(e) => setFilter(e.target.value)} />
       <ul className="max-h-80 space-y-2 overflow-auto">
-        {list.filter((w) => !filter || w.name.includes(filter) || w.kana.includes(filter)).map((w) => (
+        {list.filter((w) => !filter || toHira(w.name).includes(toHira(filter)) || toHira(w.kana).includes(toHira(filter))).map((w) => (
           <li key={w.id} className="flex items-center gap-2">
             <Input className="h-10" defaultValue={w.name} aria-label="氏名" onBlur={(e) => e.target.value.trim() && e.target.value !== w.name && upd(w, { name: e.target.value.trim() })} />
             <Input className="h-10" defaultValue={w.kana} aria-label="ふりがな" onBlur={(e) => e.target.value.trim() && e.target.value !== w.kana && upd(w, { kana: e.target.value.trim() })} />
@@ -325,7 +327,7 @@ export function SupplierMaster() {
         <div className="px-3 pb-3">
           <Input className="mb-2 h-10" placeholder="一覧から探す" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <ul className="max-h-80 space-y-2 overflow-auto">
-            {list.filter((s) => !filter || s.name.includes(filter) || s.vendor_no.includes(filter)).map((s) => (
+            {list.filter((s) => !filter || toHira(s.name).includes(toHira(filter)) || toHira(s.vendor_no).includes(toHira(filter))).map((s) => (
               <li key={s.id} className="flex items-center gap-2">
                 <Input className="h-10" defaultValue={s.name} aria-label="発注先名" onBlur={(e) => e.target.value.trim() && e.target.value !== s.name && upd(s, { name: e.target.value.trim() })} />
                 <Input className="h-10 w-24 shrink-0" defaultValue={s.vendor_no} aria-label="業者番号" onBlur={(e) => e.target.value !== s.vendor_no && upd(s, { vendor_no: e.target.value.trim() })} />

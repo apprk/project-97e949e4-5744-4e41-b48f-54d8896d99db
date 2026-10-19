@@ -21,6 +21,14 @@ export const MODES: { key: ModeKey; to: string; label: string; icon: LucideIcon;
       { key: "purchases.entry", label: "記入" },
       { key: "purchases.history", label: "履歴を見る" },
       { key: "purchases.all_workplaces", label: "全職場の履歴を見る" },
+      { key: "purchases.settings", label: "物品購入設定" },
+      { key: "purchases.workplace_edit", label: "職場修正可" },
+      { key: "purchases.workplace_blank", label: "職場欄空白化" },
+      { key: "purchases.estimate", label: "見積書欄表示・記入可" },
+      { key: "purchases.status", label: "状態操作可" },
+      { key: "purchases.fulfillment", label: "発注先・納品日・単価の操作可" },
+      { key: "purchases.inspection", label: "発注検収モード利用可" },
+      { key: "purchases.transfer", label: "物品購入Excel読込・CSV出力可" },
     ],
   },
   { key: "equipment", to: "/equipment", label: "設備保全", icon: Wrench },
@@ -37,9 +45,6 @@ export const FEATURES: Perm[] = [
   { key: "accounts.manage", label: "アカウント管理（追加）" },
   { key: "accounts.list", label: "アカウント一覧（閲覧）" },
   { key: "gate", label: "初期認証の変更" },
-  { key: "settings.writers", label: "記載者設定" },
-  { key: "settings.suppliers", label: "発注先設定" },
-  { key: "settings.analytics", label: "物品購入 分析" },
 ];
 
 export const ALL_PERMS: string[] = [...MODES.flatMap((m) => [m.key, ...(m.perms ?? []).map((p) => p.key)]), ...FEATURES.map((f) => f.key)];

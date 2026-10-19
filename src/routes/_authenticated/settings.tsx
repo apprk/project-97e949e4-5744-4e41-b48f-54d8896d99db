@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { pinToPassword, rememberLogin, slugToEmail, useAuth } from "@/lib/auth";
 import { AccountModes, GateSettings } from "@/components/AdminSettings";
+import { useServerFn } from "@tanstack/react-start";
+import { createAccount } from "@/lib/accounts.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -18,6 +20,8 @@ export const Route = createFileRoute("/_authenticated/settings")({
       { name: "description", content: "パスワード変更、パスワード省略期間、アカウント管理。" },
       { property: "og:title", content: "設定 | 三条工場 業務管理" },
       { property: "og:description", content: "パスワード変更、パスワード省略期間、アカウント管理。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SettingsPage,
@@ -31,6 +35,7 @@ const SKIP_OPTIONS = [
 ];
 
 function SettingsPage() {
+  const create = useServerFn(createAccount);
   const { profile, can, session, signOut } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -43,10 +48,12 @@ function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if(!session || !can("settings")) {setLoaded(true);return;}
     void (async () => {
       const { data } = await supabase
         .from("app_settings")
         .select("password_skip_days,trash_retention_days")
+        .eq("user_id",session.user.id)
         .maybeSingle();
       if (data) {
         setSkip(String(data.password_skip_days));
@@ -54,7 +61,7 @@ function SettingsPage() {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [session?.user.id, can("settings")]);
 
   const changePin = async () => {
     if (!profile) return;
@@ -107,23 +114,13 @@ function SettingsPage() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email: slugToEmail(newSlug),
-      password: pinToPassword(newPin),
-      options: { emailRedirectTo: window.location.origin, data: { name: newName.trim(), slug: newSlug } },
-    });
-    if (!error) await supabase.rpc("set_my_pin", { _pin: newPin });
+    try { await create({data:{name:newName.trim(),slug:newSlug,pin:newPin}}); }
+    catch(e) {toast.error(e instanceof Error ? e.message : "追加に失敗しました");setBusy(false);return;}
     setBusy(false);
-    if (error) {
-      toast.error("追加に失敗しました（IDが重複している可能性があります）");
-      return;
-    }
     setNewName("");
     setNewSlug("");
     setNewPin("");
-    // 追加直後は新しいアカウントのセッションになるため、管理者で再ログインしてもらう
-    await signOut();
-    toast.success("アカウントを追加しました。管理者で再ログインしてください。");
+    toast.success("アカウントを追加しました。");
   };
 
   return (

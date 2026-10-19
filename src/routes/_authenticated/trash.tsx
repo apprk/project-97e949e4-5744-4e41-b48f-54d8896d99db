@@ -14,6 +14,8 @@ export const Route = createFileRoute("/_authenticated/trash")({
       { name: "description", content: "削除したスケジュール・写真・設備・履歴を復元または完全削除します。" },
       { property: "og:title", content: "ごみ箱 | 三条工場 業務管理" },
       { property: "og:description", content: "削除データの復元と完全削除（管理者専用）。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: TrashPage,

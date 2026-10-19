@@ -170,3 +170,8 @@
 @utility tile-shadow {
   box-shadow: var(--shadow-tile);
 }
+
+.purchase-scroll-track { scrollbar-color: var(--muted-foreground) var(--secondary); scrollbar-width: auto; }
+.purchase-scroll-track::-webkit-scrollbar { height: 16px; }
+.purchase-scroll-track::-webkit-scrollbar-track { background: var(--secondary); }
+.purchase-scroll-track::-webkit-scrollbar-thumb { background: var(--muted-foreground); border: 3px solid var(--secondary); border-radius: 6px; }

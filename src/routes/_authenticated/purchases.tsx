@@ -28,7 +28,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/lib/auth";
-import { TABLE_SCROLL } from "@/lib/purchases";
+import { PurchaseScroll } from "@/components/PurchaseScroll";
+import { PurchaseTransfer } from "@/components/PurchaseTransfer";
+import { fetchPurchaseRows } from "@/lib/purchase-data";
+import { purchaseTextIncludes, comparePurchaseText, workplaceChangeAllowed } from "@/lib/purchases";
 import {
   STATUS,
   copyText,
@@ -108,10 +111,10 @@ const ADMIN_INLINE = new Set<ColKey>(["delivered_on", "amount", "supplier", "wor
 
 /** 列順（右端に修正・削除・コピー等の tools）：状態→記載者→品名→型式→備考→数量→単位→見積書(管理者)→操作→発注先→目安納期→納品日→単価→小計 */
 const BASIC: ColKey[] = ["status", "writer", "item_name", "model", "note", "quantity", "unit"];
-const TAIL: ColKey[] = ["supplier", "lead", "delivered_on", "amount", "subtotal"];
+const TAIL: ColKey[] = ["supplier", "delivered_on", "lead", "amount", "subtotal"];
 /** 一般アカウントには発注先を表示しない */
 const tailCols = (admin: boolean): ColKey[] => (admin ? TAIL : TAIL.filter((k) => k !== "supplier"));
-const midCols = (admin: boolean): ColKey[] => (admin ? ["estimate", "ops"] : ["ops"]);
+const midCols = (estimate: boolean, status: boolean): ColKey[] => [...(estimate ? ["estimate" as const] : []), ...(status ? ["ops" as const] : [])];
 
 const googleSearch = (q: string) =>
   window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, "_blank", "noopener,noreferrer");
@@ -130,16 +133,17 @@ function PurchasesPage() {
   const allTabs = [
     ...(can("purchases.entry") ? (["entry"] as const) : []),
     ...(can("purchases.history") ? (["history"] as const) : []),
-    ...(isAdmin ? (["inspection"] as const) : []),
-    ...(can("settings.writers") || can("settings.suppliers") || can("settings.analytics") ? (["settings"] as const) : []),
+    ...(can("purchases.inspection") ? (["inspection"] as const) : []),
+    ...(can("purchases.settings") ? (["settings"] as const) : []),
   ];
   const [tab, setTab] = useState<"entry" | "history" | "inspection" | "settings">(allTabs[0] ?? "entry");
+  const [revision, setRevision] = useState(0);
   const [writers, setWriters] = useState<Writer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const loadSuppliers = useCallback(() => {
-    if (!isAdmin) return;
+    if (!can("purchases.fulfillment") && !can("purchases.settings") && !can("purchases.inspection")) return;
     void supabase.from("purchase_suppliers").select("id,name,vendor_no").order("name").then(({ data }) => setSuppliers((data as Supplier[]) ?? []));
-  }, [isAdmin]);
+  }, [can("purchases.fulfillment"), can("purchases.settings"), can("purchases.inspection")]);
   useEffect(() => loadSuppliers(), [loadSuppliers]);
   // 一括コピー（アプリ内専用。記入・履歴の間で共有）
   const [clip, setClip] = useState<Clip | null>(null);
@@ -166,6 +170,8 @@ function PurchasesPage() {
     <div className="min-h-screen bg-background">
       <AppHeader title="物品購入" />
       <div className="mx-auto max-w-[1500px] px-3 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {can("purchases.transfer") ? <PurchaseTransfer onImported={() => setRevision((v)=>v+1)} /> : null}
         <div className="inline-flex rounded-xl border border-border bg-card p-1">
           {tabs.map((t) => (
             <button
@@ -183,6 +189,8 @@ function PurchasesPage() {
           ))}
         </div>
       </div>
+      </div>
+      <div key={revision}>
       {tabs.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">利用できる機能がありません。管理者にお問い合わせください。</p>
       ) : !tabs.includes(tab as never) ? null : tab === "entry" ? (
@@ -205,15 +213,16 @@ function PurchasesPage() {
             setTab("entry");
           }}
         />
-      ) : tab === "inspection" && isAdmin ? (
+      ) : tab === "inspection" && can("purchases.inspection") ? (
         <InspectionView suppliers={suppliers} />
       ) : tab === "settings" ? (
         <main className="mx-auto max-w-md space-y-6 px-4 pb-24 pt-5">
-          {can("settings.writers") ? <WriterMaster /> : null}
-          {can("settings.suppliers") ? <SupplierMaster /> : null}
-          {can("settings.analytics") ? <AnalyticsLink /> : null}
+          {can("purchases.settings") ? <WriterMaster /> : null}
+          {can("purchases.settings") ? <SupplierMaster /> : null}
+          {can("purchases.settings") ? <AnalyticsLink /> : null}
         </main>
       ) : null}
+      </div>
     </div>
   );
 }
@@ -230,7 +239,9 @@ function PurchaseTable({
   fullDate,
   onBulkCopy,
   suppliers,
+  highlight,
 }: {
+  highlight?: { id: string; key: ColKey } | undefined;
   suppliers: Supplier[];
   rows: Purchase[];
   cols: ColKey[];
@@ -241,7 +252,7 @@ function PurchaseTable({
   fullDate?: boolean;
   onBulkCopy: (p: Purchase) => void;
 }) {
-  const { isAdmin, session } = useAuth();
+  const { isAdmin, session, can } = useAuth();
   const [editing, setEditing] = useState<string | null>(null);
   const [estimates, setEstimates] = useState<Record<string, string>>({});
   const [atts, setAtts] = useState<Record<string, Attachment[]>>({});
@@ -252,11 +263,11 @@ function PurchaseTable({
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
     const a: Record<string, Attachment[]> = {};
-    const e: Record<string, string> = {};
+    const e: Record<string, string> = Object.fromEntries(rows.map((r)=>[r.id,r.estimate_no ?? ""]));
     await Promise.all(chunks.map(async (c) => {
       const [{ data: at }, adm] = await Promise.all([
         supabase.from("purchase_attachments").select("id,purchase_id,storage_path,photo_id").in("purchase_id", c).is("deleted_at", null).order("created_at"),
-        isAdmin ? supabase.from("purchase_admin_fields").select("purchase_id,estimate_no").in("purchase_id", c) : Promise.resolve({ data: [] as { purchase_id: string; estimate_no: string | null }[] }),
+        can("purchases.estimate") ? supabase.from("purchase_admin_fields").select("purchase_id,estimate_no").in("purchase_id", c) : Promise.resolve({ data: [] as { purchase_id: string; estimate_no: string | null }[] }),
       ]);
       (at ?? []).forEach((x) => { (a[x.purchase_id] ??= []).push(x as Attachment); });
       (adm.data ?? []).forEach((x) => { if (x.estimate_no) e[x.purchase_id] = x.estimate_no; });
@@ -266,13 +277,13 @@ function PurchaseTable({
   }, [idsKey, isAdmin]);
   useEffect(() => { void loadExtras(); }, [loadExtras]);
   const saveEstimate = async (id: string, v: string) => {
-    const { error } = await supabase.from("purchase_admin_fields").upsert({ purchase_id: id, estimate_no: v || null, updated_at: new Date().toISOString() });
+    const { error } = await supabase.rpc("save_purchase_estimate", { _id: id, _value: v });
     if (error) { toast.error("保存に失敗しました"); return; }
     setEstimates((m) => ({ ...m, [id]: v }));
   };
 
   const update = async (id: string, patch: Partial<Purchase>) => {
-    const { error } = await supabase.from("purchases").update(patch).eq("id", id);
+    const { error } = await supabase.from("purchases").update((({estimate_no,inspection_no,vendor_no,...base})=>base)(patch)).eq("id", id);
     if (error) {
       toast.error("更新に失敗しました");
       return false;
@@ -304,7 +315,7 @@ function PurchaseTable({
 
   const ops = (p: Purchase) => (
                   <div className="flex items-center gap-1">
-                    {isAdmin ? (
+                    {can("purchases.status") ? (
                       <>
                         <Button
                           size="sm"
@@ -327,7 +338,7 @@ function PurchaseTable({
                         <NeedsCheckButton p={p} onSave={(reason) => update(p.id, { status: "needs_check", check_reason: reason })} />
                       </>
                     ) : null}
-                    {p.status === "needs_check" ? (
+                    {can("purchases.status") && p.status === "needs_check" ? (
                       <Button size="sm" className="h-8 px-2" onClick={() => markChecked(p.id)}>
                         ✅ 確認済
                       </Button>
@@ -367,7 +378,7 @@ function PurchaseTable({
   );
 
   return (
-    <div className={TABLE_SCROLL}>
+    <PurchaseScroll>
       <table className="w-max min-w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-secondary text-secondary-foreground">
           <tr>
@@ -405,13 +416,14 @@ function PurchaseTable({
               <tr key={p.id} className={p.status === "rejected" ? "text-muted-foreground" : ""}>
                 {cols.map((k) => {
                   const t = COLS[k].text(p, fullDate);
+                  const marked = highlight?.id === p.id && highlight.key === k;
                   const strike = p.status === "rejected" && k !== "status" ? "line-through" : "";
-                  const right = COLS[k].align === "right" ? "text-right" : "";
-                  if (k === "ops") return <td key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{ops(p)}</td>;
-                  if (k === "tools") return <td key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{tools(p)}</td>;
+                  const right = `${COLS[k].align === "right" ? "text-right" : ""} ${marked ? "bg-accent ring-2 ring-inset ring-primary" : ""}`;
+                  if (k === "ops") return <td data-purchase-cell={`${p.id}:${k}`} key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{ops(p)}</td>;
+                  if (k === "tools") return <td data-purchase-cell={`${p.id}:${k}`} key={k} className="border-b border-r border-border px-1 py-1 align-top whitespace-nowrap">{tools(p)}</td>;
                   if (k === "estimate") {
                     return (
-                      <td key={k} className="border-b border-r border-border p-1 align-top">
+                      <td data-purchase-cell={`${p.id}:${k}`} key={k} className={`border-b border-r border-border p-1 align-top ${right}`}>
                         <EstimateCell value={estimates[p.id] ?? ""} onSave={(v) => saveEstimate(p.id, v)} />
                       </td>
                     );
@@ -419,7 +431,7 @@ function PurchaseTable({
                   if (k === "note") {
                     const mine = p.user_id === session?.user.id;
                     return (
-                      <td key={k} className={`border-b border-r border-border px-1 py-1 align-top ${strike}`}>
+                      <td data-purchase-cell={`${p.id}:${k}`} key={k} className={`border-b border-r border-border px-1 py-1 align-top ${strike} ${right}`}>
                         <div className="flex items-start gap-0.5">
                           <span
                             title={t ? "クリックでコピー" : undefined}
@@ -440,16 +452,16 @@ function PurchaseTable({
                       </td>
                     );
                   }
-                  if (isAdmin && ADMIN_INLINE.has(k)) {
+                  if ((k === "workplace" ? can("purchases.workplace_edit") : can("purchases.fulfillment")) && ADMIN_INLINE.has(k)) {
                     return (
-                      <td key={k} className="border-b border-r border-border p-1 align-top">
+                      <td data-purchase-cell={`${p.id}:${k}`} key={k} className={`border-b border-r border-border p-1 align-top ${right}`}>
                         <InlineAdminCell p={p} k={k as "delivered_on" | "amount" | "supplier" | "workplace"} suppliers={suppliers} onSave={(patch) => update(p.id, patch)} />
                       </td>
                     );
                   }
                   if (k === "status") {
                     return (
-                      <td key={k} className="border-b border-r border-border px-2 py-2 align-top whitespace-nowrap">
+                      <td data-purchase-cell={`${p.id}:${k}`} key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right}`}>
                         <StatusCell p={p} />
                       </td>
                     );
@@ -457,6 +469,7 @@ function PurchaseTable({
                   if (COPYABLE.has(k)) {
                     return (
                       <td
+                        data-purchase-cell={`${p.id}:${k}`}
                         key={k}
                         title={t ? "クリックでコピー" : undefined}
                         onClick={() => copyCell(t)}
@@ -467,7 +480,7 @@ function PurchaseTable({
                     );
                   }
                   return (
-                    <td key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right} ${strike}`}>
+                    <td data-purchase-cell={`${p.id}:${k}`} key={k} className={`border-b border-r border-border px-2 py-2 align-top whitespace-nowrap ${right} ${strike}`}>
                       {t}
                     </td>
                   );
@@ -478,7 +491,7 @@ function PurchaseTable({
           {footer}
         </tbody>
       </table>
-    </div>
+    </PurchaseScroll>
   );
 }
 
@@ -550,6 +563,7 @@ function InlineAdminCell({
   k: "delivered_on" | "amount" | "supplier" | "workplace";
   onSave: (patch: Partial<Purchase>) => Promise<boolean>;
 }) {
+  const { can } = useAuth();
   const initial = k === "amount" ? (p.amount == null ? "" : String(Number(p.amount))) : (p[k] ?? "");
   const [v, setV] = useState(initial);
   useEffect(() => setV(initial), [initial]);
@@ -563,6 +577,7 @@ function InlineAdminCell({
     } else if (k === "delivered_on") {
       void onSave({ delivered_on: val || null });
     } else if (k === "workplace") {
+      if (!workplaceChangeAllowed(can("purchases.workplace_edit"),can("purchases.workplace_blank"),val)) { toast.error("職場欄を空白にする権限がありません"); setV(initial); return; }
       void onSave({ workplace: val.trim() || null });
     } else {
       void onSave({ supplier: val.trim() || null });
@@ -749,7 +764,7 @@ function EntryView({
   initialPaste: Clip | null;
   onConsumePaste: () => void;
 }) {
-  const { session, isAdmin } = useAuth();
+  const { session, isAdmin, can, profile } = useAuth();
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
   const [rows, setRows] = useState<Purchase[] | null>(null);
@@ -763,6 +778,7 @@ function EntryView({
   );
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingAttach[]>([]);
+  const [workplace,setWorkplace] = useState(profile?.workplace ?? "");
   const [q, setQ] = useState("");
   const itemRef = useRef<HTMLInputElement>(null);
   const writerRef = useRef<HTMLInputElement>(null);
@@ -772,22 +788,12 @@ function EntryView({
   }, []);
 
   // 一般：発注先まで表示（変更不可）。管理者：全列
-  const cols: ColKey[] = isAdmin
-    ? ["written_on", "workplace", ...BASIC, ...midCols(true), ...TAIL, "tools"]
-    : ["written_on", ...BASIC, "ops", "tools"];
-
+  const cols: ColKey[] = ["written_on",...(can("purchases.workplace_edit") ? ["workplace" as const] : []),...BASIC,...midCols(can("purchases.estimate"),can("purchases.status")),...(isAdmin || can("purchases.fulfillment") ? TAIL : []),"tools"];
   const load = useCallback(async () => {
     const start = `${ym.y}-${pad(ym.m)}-01`;
     const end = ym.m === 12 ? `${ym.y + 1}-01-01` : `${ym.y}-${pad(ym.m + 1)}-01`;
-    const { data } = await supabase
-      .from("purchases")
-      .select(SELECT)
-      .is("deleted_at", null)
-      .gte("written_on", start)
-      .lt("written_on", end)
-      .order("written_on")
-      .order("created_at");
-    setRows((data as Purchase[]) ?? []);
+    try { setRows((await fetchPurchaseRows()).filter((r)=>r.written_on>=start && r.written_on<end)); }
+    catch { toast.error("一覧を読み込めませんでした"); setRows([]); }
   }, [ym]);
 
   useEffect(() => {
@@ -819,10 +825,12 @@ function EntryView({
       itemRef.current?.focus();
       return;
     }
+    if (can("purchases.workplace_edit") && !workplaceChangeAllowed(true,can("purchases.workplace_blank"),workplace)) { toast.error("職場欄を空白にする権限がありません"); return; }
     setBusy(true);
     const q = draft.quantity.trim() === "" ? null : Number(draft.quantity);
     const { data: ins, error } = await supabase.from("purchases").insert({
       user_id: session.user.id,
+      ...(can("purchases.workplace_edit") ? { workplace: workplace.trim() || null } : {}),
       writer: writer.trim(),
       item_name: draft.item_name.trim(),
       model: draft.model.trim() || null,
@@ -854,7 +862,7 @@ function EntryView({
   const footer = (
     <tr className="bg-primary/5">
       <td className="border-r border-border px-2 text-xs text-muted-foreground">新規</td>
-      {isAdmin ? <td className="border-r border-border" /> : null}
+      {can("purchases.workplace_edit") ? <td className="border-r border-border p-1"><Input aria-label="新規職場" value={workplace} onChange={(e)=>setWorkplace(e.target.value)} /></td> : null}
       <td className="border-r border-border" />
       <td className="min-w-24 border-r border-border p-1">
         <WriterInput value={writer} onChange={setWriter} writers={writers} inputRef={writerRef} onEnter={() => itemRef.current?.focus()} />
@@ -870,7 +878,7 @@ function EntryView({
       </td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-right text-sm" inputMode="decimal" placeholder="数量" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value.replace(/[^\d.]/g, "") })} onKeyDown={enter} /></td>
       <td className="border-r border-border p-1"><Input className="h-10 min-w-0 px-1.5 text-sm" placeholder="単位" value={draft.unit} onChange={d("unit")} onKeyDown={enter} /></td>
-      <td colSpan={cols.length - 8 - (isAdmin ? 1 : 0)} className="p-1">
+      <td colSpan={cols.length - 8 - (can("purchases.workplace_edit") ? 1 : 0)} className="p-1">
         <div className="flex items-center gap-1">
           <Button className="h-10" disabled={busy} onClick={submit}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} 購入依頼
@@ -928,8 +936,8 @@ function EntryView({
 /* ---------------- 履歴 ---------------- */
 
 function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supplier[]; clip: Clip | null; onBulkCopy: (p: Purchase) => void; onPaste: () => void }) {
-  const { isAdmin } = useAuth();
-  const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(isAdmin), ...tailCols(isAdmin), "tools"];
+  const { isAdmin, can } = useAuth();
+  const HISTORY_COLS: ColKey[] = ["written_on", "workplace", ...BASIC, ...midCols(can("purchases.estimate"),can("purchases.status")), ...tailCols(can("purchases.fulfillment")), "tools"];
   const [rows, setRows] = useState<Purchase[] | null>(null);
   const empty = { workplace: "", writer: "", item: "", model: "", supplier: "", from: "", to: "", status: "" };
   const [f, setF] = useState(empty);
@@ -937,8 +945,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
   const [sort, setSort] = useState<{ key: ColKey; dir: 1 | -1 }>({ key: "written_on", dir: 1 });
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("purchases").select(SELECT).is("deleted_at", null).order("written_on").order("created_at").limit(5000);
-    setRows((data as Purchase[]) ?? []);
+    try { setRows(await fetchPurchaseRows()); } catch { toast.error("履歴を読み込めませんでした"); setRows([]); }
   }, []);
   useEffect(() => {
     void load();
@@ -948,7 +955,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
 
   const view = useMemo(() => {
     if (!rows) return [];
-    const has = (s: string | null, q: string) => !q || (s ?? "").toLowerCase().includes(q.toLowerCase());
+    const has = (s: string | null, q: string) => !q || purchaseTextIncludes(s,q);
     const out = rows.filter(
       (r) =>
         (!f.workplace || r.workplace === f.workplace) &&
@@ -969,7 +976,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
     };
     return [...out].sort((a, b) => {
       const x = val(a), y = val(b);
-      const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "ja");
+      const c = typeof x === "number" && typeof y === "number" ? x - y : comparePurchaseText(String(x),String(y));
       return c * sort.dir;
     });
   }, [rows, f, sort]);
@@ -980,8 +987,16 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
   );
   const selectCls = "h-10 rounded-md border border-input bg-background px-2 text-sm";
 
+  const [word,setWord]=useState("");
+  const [matchIndex,setMatchIndex]=useState(-1);
+  const matches=useMemo(()=>word.trim() ? view.flatMap((r)=>HISTORY_COLS.filter((k)=>k!=="ops" && k!=="tools" && purchaseTextIncludes(k==="estimate" ? r.estimate_no : COLS[k].text(r,true),word)).map((key)=>({id:r.id,key}))) : [],[view,word,can("purchases.estimate"),can("purchases.fulfillment")]);
+  useEffect(()=>setMatchIndex(matches.length ? 0 : -1),[matches]);
+  const hit=matches[matchIndex];
+  useEffect(()=>{ if(!hit)return; document.querySelector(`[data-purchase-cell="${hit.id}:${hit.key}"]`)?.scrollIntoView({block:"nearest",inline:"center"}); },[hit?.id,hit?.key]);
+  const advance=(d:number)=>setMatchIndex((i)=>matches.length ? (i+d+matches.length)%matches.length : -1);
   return (
     <main className="mx-auto max-w-[1500px] px-3 pb-24 pt-3">
+      <div className="mb-2 flex items-center gap-2"><Search className="size-4"/><Input aria-label="履歴内検索" placeholder="履歴内検索" value={word} onChange={(e)=>setWord(e.target.value)} onKeyDown={(e)=>e.key==="Enter" && advance(e.shiftKey ? -1 : 1)} className="max-w-sm"/><Button size="icon" variant="outline" aria-label="前の検索結果" disabled={!matches.length} onClick={()=>advance(-1)}><ChevronLeft className="size-4"/></Button><Button size="icon" variant="outline" aria-label="次の検索結果" disabled={!matches.length} onClick={()=>advance(1)}><ChevronRight className="size-4"/></Button><span className="whitespace-nowrap text-xs">{matchIndex+1}/{matches.length}</span></div>
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-4 lg:grid-cols-8">
         <select className={selectCls} value={f.workplace} onChange={(e) => setF({ ...f, workplace: e.target.value })} aria-label="職場">
           <option value="">職場：すべて</option>
@@ -1010,7 +1025,7 @@ function HistoryView({ suppliers, clip, onBulkCopy, onPaste }: { suppliers: Supp
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <PurchaseTable rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} suppliers={suppliers} />
+        <PurchaseTable highlight={hit} rows={view} cols={HISTORY_COLS} reload={load} sort={sort} onSort={onSort} fullDate onBulkCopy={onBulkCopy} suppliers={suppliers} />
       )}
     </main>
   );

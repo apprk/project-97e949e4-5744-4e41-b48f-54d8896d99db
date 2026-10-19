@@ -37,7 +37,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { profile, modes } = useAuth();
+  const { profile, modes, can } = useAuth();
+  const showSettings=["settings","trash","accounts.manage","accounts.list","gate"].some(can);
   const menu = MODES.filter((m) => modes.includes(m.key));
 
   return (
@@ -51,11 +52,11 @@ function Home() {
                 {profile.name} - ログイン中
               </Link>
             ) : null}
-            <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
+            {showSettings ? <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
               <Link to="/settings" aria-label="設定">
                 <Settings className="size-5" />
               </Link>
-            </Button>
+            </Button> : null}
           </div>
         </div>
       </header>
