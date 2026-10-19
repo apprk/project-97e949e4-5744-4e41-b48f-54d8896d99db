@@ -93,7 +93,7 @@ function AuthPage() {
     <div className="min-h-screen bg-background">
       <header className="app-header text-primary-foreground shadow-md">
         <div className="mx-auto max-w-md px-4 py-5">
-          <h1 className="text-2xl font-bold"><Button variant="ghost" className="h-auto p-0 text-2xl font-bold text-primary-foreground" onClick={hiddenLogin}>業務管理</Button></h1>
+          <h1 className="text-2xl font-bold"><Button variant="ghost" className="h-auto cursor-default select-none p-0 text-2xl font-bold text-primary-foreground transition-none hover:bg-transparent hover:text-primary-foreground active:bg-transparent active:text-primary-foreground focus-visible:ring-0 [-webkit-tap-highlight-color:transparent]" onClick={hiddenLogin}>業務管理</Button></h1>
         </div>
       </header>
       <main className="mx-auto max-w-md px-4 pb-16 pt-6">
