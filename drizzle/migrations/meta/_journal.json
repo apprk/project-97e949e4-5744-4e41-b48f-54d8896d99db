@@ -29,6 +29,13 @@
       "when": 1792369099249,
       "tag": "0003_purchase_permission_boundaries",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792369154110,
+      "tag": "0004_inspection_number_admin_write",
+      "breakpoints": true
     }
   ]
 }

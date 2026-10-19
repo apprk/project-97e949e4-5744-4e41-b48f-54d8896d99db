@@ -617,6 +617,15 @@ export type Database = {
       my_workplace: { Args: never; Returns: string }
       purchase_rows: { Args: never; Returns: Json }
       purchase_visible: { Args: { _id: string }; Returns: boolean }
+      save_inspection_numbers: {
+        Args: {
+          _id: string
+          _inspection: string
+          _set_vendor?: boolean
+          _vendor?: string
+        }
+        Returns: undefined
+      }
       save_purchase_estimate: {
         Args: { _id: string; _value: string }
         Returns: undefined
