@@ -68,7 +68,7 @@ export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
       <Input type="file" accept=".xlsx" aria-label="物品購入Excelファイル" disabled={busy} onChange={(e)=>{setFile(e.target.files?.[0] ?? null);setPreview(null);}}/>
       <Button variant="outline" onClick={check} disabled={busy || !file}>読込内容を確認</Button>
       {progress ? <p className="text-sm" role="status">登録処理中… {progress.done} / {progress.total}件</p> : null}
-      {result ? <p className="rounded-md border border-border bg-muted p-2 text-sm" role="status">{result}</p> : null}
+      {result ? <p className="whitespace-pre-wrap rounded-md border border-border bg-muted p-2 text-sm" role="status">{result}</p> : null}
       {preview ? <div className="space-y-2 text-sm"><p className="break-all">{file?.name}</p><p>{from || "すべて"} ～ {to || "すべて"}：登録予定 {preview.length}件</p>
         <Button disabled={busy || !preview.length} onClick={register}>{busy ? <Loader2 className="size-4 animate-spin"/> : <Upload className="size-4"/>} {preview.length}件を追加登録</Button></div> : null}
       <Button variant="outline" disabled={busy} onClick={output}><Download className="size-4"/> CSV出力</Button>
