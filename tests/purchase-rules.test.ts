@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed, initialPurchaseWorkplace } from "../src/lib/purchases";
+import { inspectionMatches, normalizePurchaseText, workplaceChangeAllowed, initialPurchaseWorkplace, preserveDerivedVendor } from "../src/lib/purchases";
 import { inPurchasePeriod, parsePurchaseSheet, purchaseCsvCells, validatePurchaseFile } from "../src/lib/purchase-transfer";
 
 describe("purchase rules",()=>{
  test("administrator new workplace starts blank",()=>{expect(initialPurchaseWorkplace(true,"管理者")).toBe("");});
  test("general workplace still defaults to account workplace",()=>{expect(initialPurchaseWorkplace(false,"精整")).toBe("精整");});
+ test("changed supplier cannot overwrite automatically derived number with stale draft",()=>{expect(preserveDerivedVendor(false,"○○商事","△△商会")).toBe(true);});
+ test("unknown supplier also preserves the database cleared number",()=>{expect(preserveDerivedVendor(false,"○○商事","未登録発注先")).toBe(true);});
+ test("unchanged supplier retains manual vendor editing",()=>{expect(preserveDerivedVendor(false,"○○商事","○○商事")).toBe(false);});
+ test("new inspection preserves automatically derived vendor",()=>{expect(preserveDerivedVendor(true,null,"△△商会")).toBe(true);});
  test("inspection defaults include approved and delivered",()=>{expect(inspectionMatches("approved","123")).toBe(true);expect(inspectionMatches("delivered","")).toBe(true);expect(inspectionMatches("pending","123")).toBe(false);});
  test("approved-only excludes delivered",()=>{expect(inspectionMatches("delivered","123",false)).toBe(false);});
  test("number filters distinguish blank numbers",()=>{expect(inspectionMatches("approved","123",true,"numbered")).toBe(true);expect(inspectionMatches("approved","",true,"numbered")).toBe(false);expect(inspectionMatches("approved","123",true,"missing")).toBe(false);expect(inspectionMatches("approved","",true,"missing")).toBe(true);});
