@@ -1,6 +1,9 @@
 export type PurchaseStatus = "pending" | "approved" | "rejected" | "needs_check" | "checked" | "delivered";
 
 export type Purchase = {
+  estimate_no?: string | null;
+  inspection_no?: string | null;
+  vendor_no?: string | null;
   id: string;
   user_id: string;
   workplace: string | null;
@@ -59,7 +62,20 @@ export const fmtNum = (n: number | null) => (n == null ? "" : String(Number(n)))
 
 /** ひらがな・カタカナを同一視して比較 */
 export const toHira = (s: string) =>
-  s.replace(/[\u30a1-\u30f6]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).toLowerCase();
+  s.normalize("NFKC").replace(/[\u30a1-\u30f6]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).toLowerCase();
+
+export const normalizePurchaseText = (s: string) => s.normalize("NFKC").toLocaleLowerCase("ja");
+export const purchaseTextIncludes = (s: string | null | undefined, q: string) => normalizePurchaseText(s ?? "").includes(normalizePurchaseText(q));
+export const comparePurchaseText = (a: string, b: string) => normalizePurchaseText(a).localeCompare(normalizePurchaseText(b), "ja");
+
+export function inspectionMatches(status: PurchaseStatus, number: string, withDelivered = true, numberFilter = "all") {
+  return (status === "approved" || (withDelivered && status === "delivered")) &&
+    (numberFilter === "all" || (numberFilter === "numbered" ? !!number.trim() : !number.trim()));
+}
+
+export function workplaceChangeAllowed(canEdit: boolean, canBlank: boolean, next: string) {
+  return canEdit && (!!next.trim() || canBlank);
+}
 
 export function matchWriters(writers: Writer[], q: string) {
   const k = toHira(q.trim());
