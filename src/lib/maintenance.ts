@@ -7,7 +7,7 @@ export type Maintenance = {
   stopped: boolean; after_breakdown: boolean; created_at: string;
 };
 export type Completion = { id: string; equipment_id: string; user_id: string; performed_on: string; comment: string | null; created_at: string };
-export type NextTiming = { kind: "date"; date: string; inferred: boolean } | { kind: "state"; label: string; inferred: false };
+export type NextTiming = { kind: "date"; date: string; inferred: boolean; planned?: boolean } | { kind: "state"; label: string; inferred: false };
 export const normalizeMaintenance = (value: string) => value.normalize("NFKC").toLocaleLowerCase("ja").trim();
 export const calendarDate = (value: string | null | undefined) => {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -20,11 +20,12 @@ export function latestCompletion(history: Pick<Completion, "performed_on">[]) {
   return dates.length ? format(new Date(Math.max(...dates.map(d => d.getTime()))), "yyyy-MM-dd") : null;
 }
 export function nextTiming(record: Pick<Maintenance, "stopped" | "after_breakdown" | "planned_on" | "cycle_value" | "cycle_unit">, history: Pick<Completion, "performed_on">[], today: string): NextTiming {
-  if (record.stopped || record.after_breakdown) return { kind: "state", label: [record.stopped ? "停止" : "", record.after_breakdown ? "破損後" : ""].filter(Boolean).join("・"), inferred: false };
-  const now = calendarDate(today);
-  const planned = calendarDate(record.planned_on);
-  if (planned && now && planned.getTime() >= now.getTime()) return { kind: "date", date: format(planned, "yyyy-MM-dd"), inferred: false };
+  void today; // 予定日の有効性は最終実施日との比較のみで判定し、今日との比較は行わない。
+  if (record.stopped || record.after_breakdown) return { kind: "state", label: [record.stopped ? "非表示" : "", record.after_breakdown ? "破損後" : ""].filter(Boolean).join("・"), inferred: false };
   const latest = calendarDate(latestCompletion(history));
+  const planned = calendarDate(record.planned_on);
+  // 予定日は最終実施日より後（履歴がなければ無条件）なら有効。過去の年月でも次回時期として保持し、未実施分類は月比較に委ねる。
+  if (planned && (!latest || planned.getTime() > latest.getTime())) return { kind: "date", date: format(planned, "yyyy-MM-dd"), inferred: false, planned: true };
   if (!latest) return { kind: "state", label: "未定", inferred: false };
   if (record.cycle_value && record.cycle_value > 0 && record.cycle_unit) {
     const calculators = { year: addYears, month: addMonths, week: addWeeks };
