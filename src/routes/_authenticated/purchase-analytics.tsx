@@ -74,6 +74,7 @@ function AnalyticsPage() {
           <Input type="date" className="h-10 w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="開始日" />
           <span>〜</span>
           <Input type="date" className="h-10 w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="終了日" />
+          <Button size="sm" variant="outline" onClick={() => setSupplierOpen(true)}><Building2 className="size-4"/>業者{excluded.size ? `（${suppliers.length - excluded.size}/${suppliers.length}）` : ""}</Button>
           <span className="ml-auto text-sm">小計合計 <b className="text-lg">{fmtYen(total)}</b></span>
         </section>
 
