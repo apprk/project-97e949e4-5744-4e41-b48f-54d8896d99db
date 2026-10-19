@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { TABLE_SCROLL } from "@/lib/purchases";
 
 /** One native horizontal track shared with the table, pinned to the viewport. */
-export function PurchaseScroll({ children }: { children: ReactNode }) {
-  const table = useRef<HTMLDivElement>(null);
+export function PurchaseScroll({ children, scrollRef }: { children: ReactNode; scrollRef?: RefObject<HTMLDivElement | null> | undefined }) {
+  const localTable = useRef<HTMLDivElement>(null);
+  const table = scrollRef ?? localTable;
   const track = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -17,7 +18,7 @@ export function PurchaseScroll({ children }: { children: ReactNode }) {
     return () => observer.disconnect();
   }, [children]);
   return <>
-    <div ref={table} className={TABLE_SCROLL} onScroll={() => {
+    <div ref={table} data-purchase-scroll className={TABLE_SCROLL} onScroll={() => {
       if (track.current && table.current) track.current.scrollLeft = table.current.scrollLeft;
     }}>{children}</div>
     <div className="fixed inset-x-3 bottom-0 z-30 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">

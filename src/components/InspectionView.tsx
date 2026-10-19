@@ -5,6 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PurchaseScroll } from "@/components/PurchaseScroll";
+import { PurchasePeriodControls, PurchasePeriodLabel, usePurchasePeriod } from "@/components/PurchasePeriod";
+import { matchesPurchasePeriod } from "@/lib/purchase-period";
+import { usePurchaseBottom } from "@/hooks/use-purchase-bottom";
 import { fetchPurchaseRows } from "@/lib/purchase-data";
 import { SupplierInput } from "@/components/PurchaseExtras";
 import type { Supplier } from "@/components/AdminSettings";
@@ -51,6 +54,9 @@ const num = (s: string) => {
 export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
   const { session, isAdmin } = useAuth();
   const [rows, setRows] = useState<Row[] | null>(null);
+  const periodControl = usePurchasePeriod();
+  const { period } = periodControl;
+  const { scrollRef, scrollToBottom } = usePurchaseBottom(rows !== null);
   const [withDelivered, setWithDelivered] = useState(true);
   const [numberFilter,setNumberFilter]=useState("all");
   const [sort, setSort] = useState<{ k: K; dir: 1 | -1 }>({ k: "written_on", dir: 1 });
@@ -73,11 +79,11 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       if (sort.k === "written_on") return r.written_on + r.created_at;
       return String(r[sort.k] ?? "");
     };
-    return rows.filter((r)=>inspectionMatches(r.status,r.inspection_no,withDelivered,numberFilter)).sort((a, b) => {
+    return rows.filter((r)=>matchesPurchasePeriod(r.written_on,period) && inspectionMatches(r.status,r.inspection_no,withDelivered,numberFilter)).sort((a, b) => {
       const x = v(a), y = v(b);
       return (typeof x === "number" && typeof y === "number" ? x - y : comparePurchaseText(String(x),String(y))) * sort.dir;
     });
-  }, [rows, sort, withDelivered, numberFilter]);
+  }, [rows, sort, withDelivered, numberFilter, period]);
 
   const vendorOf = (name: string) => suppliers.find((s) => s.name === name.trim())?.vendor_no ?? "";
 
@@ -176,15 +182,18 @@ export function InspectionView({ suppliers }: { suppliers: Supplier[] }) {
       <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
         <h2 className="text-lg font-bold">発注検収</h2>
         <span className="text-muted-foreground">{view.length}件</span>
+        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={scrollToBottom}><ArrowDown className="size-3"/>ページ下部へ</Button>
         <div className="ml-auto flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2"><PurchasePeriodControls control={periodControl} dates={(rows ?? []).map((r) => r.written_on)}/></div>
           <select aria-label="発注検収状態" className="h-10 rounded-md border border-input bg-background px-2" value={withDelivered ? "both" : "approved"} onChange={(e)=>setWithDelivered(e.target.value==="both")}><option value="approved">承認済のみ</option><option value="both">承認済＆納品済</option></select>
           <select aria-label="検収番号の絞り込み" className="h-10 rounded-md border border-input bg-background px-2" value={numberFilter} onChange={(e)=>setNumberFilter(e.target.value)}><option value="all">記載済＆未記載</option><option value="numbered">記載済のみ</option><option value="missing">未記載のみ</option></select>
         </div>
       </div>
+      <div className="mb-2"><PurchasePeriodLabel period={period}/></div>
       {rows === null ? (
         <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
       ) : (
-        <PurchaseScroll>
+        <PurchaseScroll scrollRef={scrollRef}>
           <table className="w-max min-w-full border-collapse text-sm">
             <thead className="bg-secondary text-secondary-foreground">
               <tr>
