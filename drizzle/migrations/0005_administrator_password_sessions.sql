@@ -1,0 +1,15 @@
+CREATE TABLE public.admin_auth_state (user_id uuid PRIMARY KEY, migrated_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT ON public.admin_auth_state TO authenticated; GRANT ALL ON public.admin_auth_state TO service_role;
+ALTER TABLE public.admin_auth_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "own migration state" ON public.admin_auth_state FOR SELECT TO authenticated USING(user_id=auth.uid());
+CREATE TABLE public.admin_login_sessions (session_id uuid PRIMARY KEY, user_id uuid NOT NULL, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT ON public.admin_login_sessions TO authenticated; GRANT ALL ON public.admin_login_sessions TO service_role;
+ALTER TABLE public.admin_login_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "own admin session" ON public.admin_login_sessions FOR SELECT TO authenticated USING(user_id=auth.uid());
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT public.has_role(auth.uid(),'admin') AND (NOT EXISTS(SELECT 1 FROM public.admin_auth_state WHERE user_id=auth.uid()) OR EXISTS(SELECT 1 FROM public.admin_login_sessions WHERE user_id=auth.uid() AND session_id::text=auth.jwt()->>'session_id' AND expires_at>now())) $$;
+CREATE OR REPLACE FUNCTION public.is_admin_account(_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT EXISTS(SELECT 1 FROM public.user_roles WHERE user_id=_id AND role='admin') $$;
+REVOKE ALL ON FUNCTION public.is_admin_account(uuid) FROM PUBLIC; GRANT EXECUTE ON FUNCTION public.is_admin_account(uuid) TO anon,authenticated,service_role;
+DROP POLICY IF EXISTS "profiles readable" ON public.profiles;
+CREATE POLICY "profiles readable" ON public.profiles FOR SELECT TO anon,authenticated USING(id=auth.uid() OR public.is_admin() OR NOT public.is_admin_account(id));
+DROP POLICY IF EXISTS "roles insert self bootstrap" ON public.user_roles;
+CREATE POLICY "roles insert admin only" ON public.user_roles FOR INSERT TO authenticated WITH CHECK(public.is_admin());

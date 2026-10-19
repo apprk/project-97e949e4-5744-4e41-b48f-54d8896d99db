@@ -36,6 +36,13 @@
       "when": 1792369154110,
       "tag": "0004_inspection_number_admin_write",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792369594258,
+      "tag": "0005_administrator_password_sessions",
+      "breakpoints": true
     }
   ]
 }
