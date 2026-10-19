@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchPurchaseRows } from "@/lib/purchase-data";
 import {useServerFn} from "@tanstack/react-start";
 import {exportPurchaseCsv} from "@/lib/purchase-export.functions";
-import { inPurchasePeriod, parsePurchaseWorkbook, purchaseCsv, validatePurchaseFile, type ImportPurchase } from "@/lib/purchase-transfer";
+import { parsePurchaseWorkbook, validatePurchaseFile, type ImportPurchase } from "@/lib/purchase-transfer";
 
 export function PurchaseTransfer({ onImported }: { onImported: () => void }) {
   const exportCsv=useServerFn(exportPurchaseCsv);
