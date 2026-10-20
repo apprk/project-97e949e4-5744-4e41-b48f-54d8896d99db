@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { signAttachments } from "@/lib/attachments.functions";
 import { toHira } from "@/lib/purchases";
+import { compressImage } from "@/lib/image-compress";
 import type { Supplier } from "@/components/AdminSettings";
 
 /* ---------------- 発注先入力（発注先マスタから候補） ---------------- */
@@ -106,9 +107,10 @@ export async function saveAttachments(purchaseId: string, uid: string, items: Pe
   for (const it of items) {
     let path = it.photo?.storage_path;
     if (it.file) {
-      const ext = (it.file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const file = await compressImage(it.file);
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       path = `${uid}/purchase-${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("photos").upload(path, it.file, { contentType: it.file.type || "image/jpeg" });
+      const { error } = await supabase.storage.from("photos").upload(path, file, { contentType: file.type || "image/jpeg" });
       if (error) continue;
     }
     if (!path) continue;

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { signMaintenancePhotos } from "@/lib/maintenance.functions";
 import { japanToday, type Completion, type Maintenance } from "@/lib/maintenance";
+import { compressImage } from "@/lib/image-compress";
 import { readAllPages } from "@/lib/schedule-import";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,9 +82,10 @@ export function HistoryPanel({ record, history, reload }: { record: Maintenance;
       for(const p of picked){
         let path=p.photo?.storage_path;
         if(p.file){
-          const ext=(p.file.name.split(".").pop()??"jpg").replace(/[^a-zA-Z0-9]/g,"");
+          const file=await compressImage(p.file);
+          const ext=(file.name.split(".").pop()??"jpg").replace(/[^a-zA-Z0-9]/g,"");
           path=`${session.user.id}/maintenance-${crypto.randomUUID()}.${ext||"jpg"}`;
-          const {error}=await supabase.storage.from("photos").upload(path,p.file,{contentType:p.file.type||"image/jpeg"});
+          const {error}=await supabase.storage.from("photos").upload(path,file,{contentType:file.type||"image/jpeg"});
           if(error)throw error;
           uploaded.push(path);
         }

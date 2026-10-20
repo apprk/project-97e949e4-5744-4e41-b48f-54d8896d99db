@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
+import { compressImage } from "@/lib/image-compress";
 
 export const Route = createFileRoute("/_authenticated/photos")({
   head: () => ({
@@ -113,9 +114,10 @@ function PhotosPage() {
   const upload = async () => {
     if (!pending || !session) return;
     setUploading(true);
-    const ext = pending.file.name.split(".").pop() || "jpg";
+    const file = await compressImage(pending.file);
+    const ext = file.name.split(".").pop() || "jpg";
     const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("photos").upload(path, pending.file);
+    const { error: upErr } = await supabase.storage.from("photos").upload(path, file, { contentType: file.type || "image/jpeg" });
     if (upErr) {
       setUploading(false);
       toast.error("アップロードに失敗しました");
