@@ -474,6 +474,16 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 ## Development
 
+### 引っ越し先の管理者初回設定
+
+- 既存の構造を移したあと、`drizzle/migrations/0009_first_admin_setup.sql` を追加で実行してください。現在のデータは削除しません。
+- 引っ越し先のサーバー側環境変数だけに `ALLOW_INITIAL_ADMIN_SETUP=true` を設定してください。ブラウザ公開用の変数にしないでください。現在のLovable環境では有効にしません。
+- 従来の端末初期認証は必要です。その後、管理者がまだ登録されていなければ「初回設定を開始」が表示されます。既存の管理者ID・パスワードは不要で、自分のID・パスワードを設定してから業務画面に入ります。
+- IDは半角小文字・数字・ハイフン・下線、パスワードは英字と数字を含む6文字以上です。既存の架空メールアドレス方式のため、メールでのパスワード再設定は利用できません。
+- 完了後は `ALLOW_INITIAL_ADMIN_SETUP` を削除するか `false` にしてください。管理者がいる場合や初回設定が完了済みの場合、再設定できません。
+- 初回設定は一度に一人のみです。失敗時はこの試行で作成したアカウントだけを片付け、再試行できます。処理中にサーバーが中断した場合は、安全のため自動では再開しません。
+- 引っ越し先でもサーバーの管理用キーとメール・パスワード認証の有効化が必要です。この変更だけでは外部への公開・データ移行は完了しません。
+
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh

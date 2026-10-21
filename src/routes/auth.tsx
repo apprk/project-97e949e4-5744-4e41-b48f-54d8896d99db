@@ -8,6 +8,8 @@ import { pinToPassword, rememberLogin, slugToEmail, useAuth, type Profile } from
 import { useServerFn } from "@tanstack/react-start";
 import { listAccounts } from "@/lib/gate.functions";
 import { GATE_TOKEN_KEY, getGateToken } from "@/lib/modes";
+import { firstAdminSetupStatus } from "@/lib/admin-setup.functions";
+import { FirstAdminSetup } from "@/components/FirstAdminSetup";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -27,6 +29,8 @@ function AuthPage() {
   const router = useRouter();
   const { refresh } = useAuth();
   const fetchAccounts = useServerFn(listAccounts);
+  const fetchSetupStatus = useServerFn(firstAdminSetupStatus);
+  const [initialSetup, setInitialSetup] = useState(false);
   const [accounts, setAccounts] = useState<Profile[] | null>(null);
   const [selected, setSelected] = useState<Profile | null>(null);
   const [pin, setPin] = useState("");
@@ -50,11 +54,13 @@ function AuthPage() {
       void router.navigate({ to: "/gate", replace: true });
       return;
     }
+    const setup = await fetchSetupStatus({ data: { token } });
+    setInitialSetup(setup.available);
     setAccounts(r.accounts as Profile[]);
   };
 
   useEffect(() => {
-    void loadAccounts();
+    void loadAccounts().catch(() => toast.error("ログイン画面を読み込めませんでした"));
   }, []);
 
   const submit = async (value: string) => {
@@ -97,7 +103,7 @@ function AuthPage() {
         </div>
       </header>
       <main className="mx-auto max-w-md px-4 pb-16 pt-6">
-        {!selected ? (
+        {initialSetup ? <FirstAdminSetup /> : !selected ? (
           <>
             <h2 className="mb-3 text-sm font-bold text-muted-foreground">アカウントを選択</h2>
             {accounts === null ? (

@@ -1,4 +1,6 @@
 # Work
+- [x] Add destination-only one-time administrator setup; eight auth/setup tests pass, existing administrator screen and permanently closed current setup verified.
+- [ ] Verify first registration in the new destination. Blocked: destination not connected here; needs additional migration and server-only ALLOW_INITIAL_ADMIN_SETUP=true there. Existing administrator credentials and unrelated pending verification remain unchanged.
 - [x] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace. Four/five-tap browser flow verified.
 - [x] Diagnose supplier/vendor persistence across all edit paths and repair without changing unrelated rows; vendor preservation rules tested.
 - [x] Repair and test purchase analytics reads, inclusive delivery periods, subtotals and empty/error states; 27 purchase/analytics/auth tests pass.
