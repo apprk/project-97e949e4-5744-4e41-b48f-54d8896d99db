@@ -1,4 +1,5 @@
 # Work
+- [ ] Add destination-only, one-time administrator setup without existing credentials; preserve current administrator login and verify security rules.
 - [x] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace. Four/five-tap browser flow verified.
 - [x] Diagnose supplier/vendor persistence across all edit paths and repair without changing unrelated rows; vendor preservation rules tested.
 - [x] Repair and test purchase analytics reads, inclusive delivery periods, subtotals and empty/error states; 27 purchase/analytics/auth tests pass.

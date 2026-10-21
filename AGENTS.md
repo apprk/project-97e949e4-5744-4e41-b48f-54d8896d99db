@@ -27,3 +27,4 @@
 - Purchase photo attachments reference storage paths in `purchase_attachments`; URLs are signed server-side after an RLS visibility check. Why: existing photos are reused without copying.
 - Administrator authentication uses server-verified passwords, migration markers and JWT-session-bound expiring grants; is_admin checks these grants after migration. Why: hidden navigation and browser storage are not authorization boundaries.
 - Administrator secrets are stored only by Auth, never in account_pins; the legacy PIN is accepted solely to authenticate first-time password migration. Why: preserve access while preventing PIN fallback after migration.
+- First administrator setup requires explicit server opt-in, a verified device gate, and a service-only database claim; no business access is granted before chosen credentials are saved. Why: fresh installations can initialize without opening existing administrators to credential-free access.
