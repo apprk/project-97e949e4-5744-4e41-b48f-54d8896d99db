@@ -26,6 +26,7 @@ export const completeFirstAdminSetup = createServerFn({ method: "POST" })
     if (claimError || claimed !== true) throw new Error("初回設定は開始済み、または完了しています");
     let createdId: string | null = null;
     let completed = false;
+    let finalizing = false;
     const client = passwordClient();
     try {
       const email = `${data.slug}@sanjo.local`;
@@ -37,6 +38,7 @@ export const completeFirstAdminSetup = createServerFn({ method: "POST" })
       createdId = created.user.id;
       const { data: login, error: loginError } = await client.auth.signInWithPassword({ email, password: data.password });
       if (loginError || !login.session) throw new Error("初回設定の認証に失敗しました");
+      finalizing = true;
       const { data: saved, error: saveError } = await supabaseAdmin.rpc("finish_first_admin_setup", {
         _claim: claim, _user: createdId, _session: sessionId(login.session.access_token),
       });
@@ -46,7 +48,8 @@ export const completeFirstAdminSetup = createServerFn({ method: "POST" })
     } finally {
       // Only a user created by this exact failed attempt can be removed.
       // A completed claim stays permanently closed, even if roles are later removed.
-      if (!completed) {
+      // A lost finalize response may already have committed: never delete that user.
+      if (!completed && !finalizing) {
         let cleaned = true;
         if (createdId) {
           const { error } = await supabaseAdmin.auth.admin.deleteUser(createdId);
