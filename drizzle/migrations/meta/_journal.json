@@ -64,6 +64,13 @@
       "when": 1792386863479,
       "tag": "0008_optimize_purchase_rows_and_import_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792540958135,
+      "tag": "0009_first_admin_setup",
+      "breakpoints": true
     }
   ]
 }

@@ -86,6 +86,24 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_setup_state: {
+        Row: {
+          claim_id: string
+          completed_at: string | null
+          id: number
+        }
+        Insert: {
+          claim_id: string
+          completed_at?: string | null
+          id?: number
+        }
+        Update: {
+          claim_id?: string
+          completed_at?: string | null
+          id?: number
+        }
+        Relationships: []
+      }
       app_gate: {
         Row: {
           id: number
@@ -735,6 +753,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_first_admin_setup: { Args: { _claim: string }; Returns: boolean }
+      finish_first_admin_setup: {
+        Args: { _claim: string; _session: string; _user: string }
+        Returns: boolean
+      }
+      first_admin_setup_available: { Args: never; Returns: boolean }
       has_perm: { Args: { _perm: string }; Returns: boolean }
       has_role: {
         Args: {
@@ -750,6 +774,10 @@ export type Database = {
       my_workplace: { Args: never; Returns: string }
       purchase_rows: { Args: never; Returns: Json }
       purchase_visible: { Args: { _id: string }; Returns: boolean }
+      release_first_admin_setup: {
+        Args: { _claim: string }
+        Returns: undefined
+      }
       save_inspection_numbers: {
         Args: {
           _id: string
