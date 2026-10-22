@@ -325,6 +325,27 @@ export type Database = {
         }
         Relationships: []
       }
+      equipment_view_sessions: {
+        Row: {
+          session_id: string
+          target_user_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          session_id: string
+          target_user_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          session_id?: string
+          target_user_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       photo_folder_items: {
         Row: {
           created_at: string
@@ -754,6 +775,13 @@ export type Database = {
     }
     Functions: {
       claim_first_admin_setup: { Args: { _claim: string }; Returns: boolean }
+      equipment_accounts: { Args: never; Returns: Json }
+      equipment_target_allowed: {
+        Args: { _target: string; _write?: boolean }
+        Returns: boolean
+      }
+      equipment_view_active: { Args: never; Returns: boolean }
+      equipment_view_target: { Args: never; Returns: string }
       finish_first_admin_setup: {
         Args: { _claim: string; _session: string; _user: string }
         Returns: boolean
@@ -791,6 +819,7 @@ export type Database = {
         Args: { _id: string; _value: string }
         Returns: undefined
       }
+      set_equipment_target: { Args: { _target?: string }; Returns: string }
       set_my_pin: { Args: { _pin: string }; Returns: undefined }
     }
     Enums: {
