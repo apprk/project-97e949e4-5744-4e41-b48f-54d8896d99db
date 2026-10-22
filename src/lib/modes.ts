@@ -31,7 +31,7 @@ export const MODES: { key: ModeKey; to: string; label: string; icon: LucideIcon;
       { key: "purchases.transfer", label: "物品購入Excel読込・CSV出力可" },
     ],
   },
-  { key: "equipment", to: "/equipment", label: "設備保全", icon: Wrench },
+  { key: "equipment", to: "/equipment", label: "設備保全", icon: Wrench, perms: [{ key: "equipment.monitor", label: "別アカウント監視" }] },
 ];
 
 /**

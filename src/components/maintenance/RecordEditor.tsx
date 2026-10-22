@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export type DisplaySettings={show_name:boolean;show_assignee:boolean};
 export type EquipmentName={id:string;name:string};
 export function blankMaintenance(name=""):Maintenance{return {id:"",user_id:"",name,repair_content:"",assignee:null,cycle_value:null,cycle_unit:null,planned_on:null,stopped:false,after_breakdown:false,created_at:""};}
-export function RecordEditor({ record, names, display, reload, onSaved, onHistory }: {record:Maintenance;names:EquipmentName[];display:DisplaySettings;reload:()=>Promise<void>;onSaved?:()=>void;onHistory?:(r:Maintenance)=>void}) {
+export function RecordEditor({ record, names, display, reload, onSaved, onHistory, targetUserId }: {record:Maintenance;names:EquipmentName[];display:DisplaySettings;reload:()=>Promise<void>;onSaved?:()=>void;onHistory?:(r:Maintenance)=>void;targetUserId?:string}) {
   const {session}=useAuth();
   const [draft,setDraft]=useState(record);
   const [busy,setBusy]=useState(false);
@@ -26,13 +26,13 @@ export function RecordEditor({ record, names, display, reload, onSaved, onHistor
     setBusy(true);
     try{
       const payload={name:draft.name,repair_content:draft.repair_content.trim(),assignee:draft.assignee,planned_on:draft.planned_on||null,cycle_value:draft.cycle_value,cycle_unit:draft.cycle_value?draft.cycle_unit:null,stopped:draft.stopped,after_breakdown:draft.after_breakdown};
-      const {data,error}=draft.id?await supabase.from("equipment").update(payload).eq("id",draft.id).select("id").single():await supabase.from("equipment").insert({...payload,user_id:session.user.id}).select("id").single();
+      const {data,error}=draft.id?await supabase.from("equipment").update(payload).eq("id",draft.id).eq("user_id",targetUserId??record.user_id).select("id").single():await supabase.from("equipment").insert({...payload,user_id:targetUserId??session.user.id}).select("id").single();
       if(error||!data)throw error??new Error("保存結果がありません");
       if(!draft.id){setDraft(blankMaintenance(record.name));onSaved?.();}
       await reload();toast.success("保存しました");
     }catch{toast.error("保存に失敗しました");}finally{setBusy(false);}
   };
-  const remove=async()=>{if(!confirm("この修理内容をごみ箱へ移動しますか？"))return;setBusy(true);const {data,error}=await supabase.from("equipment").update({deleted_at:new Date().toISOString()}).eq("id",draft.id).select("id");if(error||!data?.length)toast.error("移動できませんでした");else{await reload();toast.success("ごみ箱へ移動しました");}setBusy(false);};
+  const remove=async()=>{if(!confirm("この修理内容をごみ箱へ移動しますか？"))return;setBusy(true);const {data,error}=await supabase.from("equipment").update({deleted_at:new Date().toISOString()}).eq("id",draft.id).eq("user_id",targetUserId??record.user_id).select("id");if(error||!data?.length)toast.error("移動できませんでした");else{await reload();toast.success("ごみ箱へ移動しました");}setBusy(false);};
   const candidates=names.filter(n=>normalizeMaintenance(n.name).includes(normalizeMaintenance(draft.name))).slice(0,8);
   const suffix=draft.id||"new";
   return <article className="border-b border-border py-5" data-record={draft.id||"new"}>

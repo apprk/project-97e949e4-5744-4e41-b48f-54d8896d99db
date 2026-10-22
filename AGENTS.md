@@ -28,3 +28,6 @@
 - Administrator authentication uses server-verified passwords, migration markers and JWT-session-bound expiring grants; is_admin checks these grants after migration. Why: hidden navigation and browser storage are not authorization boundaries.
 - Administrator secrets are stored only by Auth, never in account_pins; the legacy PIN is accepted solely to authenticate first-time password migration. Why: preserve access while preventing PIN fallback after migration.
 - First administrator setup requires explicit server opt-in, a verified device gate, and a service-only database claim; no business access is granted before chosen credentials are saved. Why: fresh installations can initialize without opening existing administrators to credential-free access.
+
+- Equipment monitoring targets are persisted per validated Auth session, distinct from login identity; restrictive RLS blocks other business modes and scopes maintenance reads/writes, while target selection uses checked database functions. Why: browser navigation or forged target IDs cannot expand account access.
+- Common app icons and manifest are served from public assets and referenced by root head metadata. Why: browser and home-screen icons use the same uploaded files without framework-specific index HTML.

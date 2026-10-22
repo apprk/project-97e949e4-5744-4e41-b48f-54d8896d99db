@@ -3,7 +3,7 @@ import { ArrowLeft, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
-export function AppHeader({ title, back = "/" }: { title: string; back?: string }) {
+export function AppHeader({ title, back = "/", equipmentOnly = false }: { title: string; back?: string; equipmentOnly?: boolean }) {
   const { profile, signOut, can } = useAuth();
   const showSettings = ["settings", "trash", "accounts.manage", "accounts.list", "gate"].some(can);
   const router = useRouter();
@@ -11,7 +11,7 @@ export function AppHeader({ title, back = "/" }: { title: string; back?: string 
   return (
     <header className="app-header sticky top-0 z-20 text-primary-foreground shadow-md">
       <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-3">
-        {back ? (
+        {back && !equipmentOnly ? (
           <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
             <Link to={back} aria-label="戻る">
               <ArrowLeft className="size-5" />
@@ -22,12 +22,12 @@ export function AppHeader({ title, back = "/" }: { title: string; back?: string 
         {profile ? (
           <span className="hidden text-[11px] opacity-90 sm:inline">{profile.name} - ログイン中</span>
         ) : null}
-        {showSettings ? <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
+        {showSettings && !equipmentOnly ? <Button asChild variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15">
           <Link to="/settings" aria-label="設定">
             <Settings className="size-5" />
           </Link>
         </Button> : null}
-        {profile ? (
+        {profile && !equipmentOnly ? (
           <Button
             variant="ghost"
             size="icon"
