@@ -1,3 +1,4 @@
+import { assertNormalMode } from "@/lib/equipment-view";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -42,6 +43,7 @@ export const administratorLogin = createServerFn({method:"POST"})
 export const changeAdministratorPassword=createServerFn({method:"POST"}).middleware([requireSupabaseAuth])
   .inputValidator((d)=>z.object({current:z.string().max(1000),next:z.string().max(1000)}).parse(d))
   .handler(async({data,context})=>{
+    await assertNormalMode(context.supabase);
     const {data:admin}=await context.supabase.rpc("is_admin");
     if(!admin)throw new Error("Forbidden");
     if(!validAdminPassword(data.next))throw new Error("英字と数字を含む6文字以上で入力してください");
@@ -62,6 +64,7 @@ export const changeAdministratorPassword=createServerFn({method:"POST"}).middlew
 export const retainAdministratorSession=createServerFn({method:"POST"}).middleware([requireSupabaseAuth])
   .inputValidator((d)=>z.object({days:z.union([z.literal(0),z.literal(1),z.literal(7),z.literal(30)])}).parse(d))
   .handler(async({data,context})=>{
+    await assertNormalMode(context.supabase);
     const {data:admin}=await context.supabase.rpc("is_admin");if(!admin)throw new Error("Forbidden");
     const {supabaseAdmin}=await import("@/integrations/supabase/client.server");
     const id=context.claims.session_id;

@@ -78,6 +78,13 @@
       "when": 1792629407250,
       "tag": "0010_equipment_account_monitoring",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792716386007,
+      "tag": "0011_equipment_monitoring_hardening",
+      "breakpoints": true
     }
   ]
 }

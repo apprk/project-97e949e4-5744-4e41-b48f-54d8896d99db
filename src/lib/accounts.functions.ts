@@ -1,3 +1,4 @@
+import { assertNormalMode } from "@/lib/equipment-view";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -6,6 +7,7 @@ export const createAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d)=>z.object({name:z.string().trim().min(1).max(100),slug:z.string().regex(/^[a-z0-9_-]{2,20}$/),pin:z.string().regex(/^\d{4}$/)}).parse(d))
   .handler(async ({data,context})=>{
+    await assertNormalMode(context.supabase);
     const {data:allowed,error:permissionError}=await context.supabase.rpc("has_perm",{_perm:"accounts.manage"});
     if(permissionError || !allowed)throw new Error("Forbidden");
     const {supabaseAdmin}=await import("@/integrations/supabase/client.server");
@@ -26,6 +28,7 @@ export const disableAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ userId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    await assertNormalMode(context.supabase);
     await assertAdmin(context.supabase);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: roles } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId);
@@ -42,6 +45,7 @@ export const resetAccountPin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ userId: z.string().uuid(), pin: z.string().regex(/^\d{4}$/) }).parse(d))
   .handler(async ({ data, context }) => {
+    await assertNormalMode(context.supabase);
     await assertAdmin(context.supabase);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const {data:roles}=await supabaseAdmin.from("user_roles").select("role").eq("user_id",data.userId);
