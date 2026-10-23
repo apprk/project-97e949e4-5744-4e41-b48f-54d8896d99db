@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export type DisplaySettings={show_name:boolean;show_assignee:boolean};
 export type EquipmentName={id:string;name:string};
 export function blankMaintenance(name=""):Maintenance{return {id:"",user_id:"",name,repair_content:"",assignee:null,cycle_value:null,cycle_unit:null,planned_on:null,stopped:false,after_breakdown:false,created_at:""};}
-export function RecordEditor({ record, names, display, reload, onSaved, onHistory, targetUserId }: {record:Maintenance;names:EquipmentName[];display:DisplaySettings;reload:()=>Promise<void>;onSaved?:()=>void;onHistory?:(r:Maintenance)=>void;targetUserId?:string}) {
+export function RecordEditor({ record, names, display, reload, onSaved, onHistory, targetUserId }: {record:Maintenance;names:EquipmentName[];display:DisplaySettings;reload:()=>Promise<void>;onSaved?:()=>void;onHistory?:(r:Maintenance)=>void;targetUserId?:string|undefined}) {
   const {session}=useAuth();
   const [draft,setDraft]=useState(record);
   const [busy,setBusy]=useState(false);

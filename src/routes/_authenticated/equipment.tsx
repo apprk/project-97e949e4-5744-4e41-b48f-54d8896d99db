@@ -44,8 +44,8 @@ function EquipmentPage() {
   const readOnly=!!session && !!targetId && equipmentReadOnly(session.user.id,targetId,isAdmin);
   const changeTarget=async(id:string)=>{
     setSwitching(true);setLoading(true);request.current++;setItems([]);setHistory([]);setHistoryOf(null);setEditingRecord(null);setGroup(null);setView("list");
-    try{const {error}=await supabase.rpc("set_equipment_target",{_target:id===session?.user.id?null:id});if(error)throw error;const state=await equipmentView();setAccounts(state.accounts);setTarget(state.target??session?.user.id??null);await load();}
-    catch{setError(true);toast.error("アカウントを切り替えられませんでした");}
+    try{const {error}=await supabase.rpc("set_equipment_target",id===session?.user.id?{}:{_target:id});if(error)throw error;const state=await equipmentView();setAccounts(state.accounts);setTarget(state.target??session?.user.id??null);await load();}
+    catch{setError(true);setLoading(false);toast.error("アカウントを切り替えられませんでした");}
     finally{setSwitching(false);}
   };
   const [items,setItems]=useState<Maintenance[]>([]);
