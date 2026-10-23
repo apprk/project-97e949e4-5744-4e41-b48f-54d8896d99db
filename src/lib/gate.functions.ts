@@ -1,3 +1,4 @@
+import { assertNormalMode } from "@/lib/equipment-view";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -63,6 +64,7 @@ export const listAccounts = createServerFn({ method: "POST" })
 export const getGateId = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await assertNormalMode(context.supabase);
     const { data: admin } = await context.supabase.rpc("has_perm", { _perm: "gate" });
     if (!admin) throw new Error("Forbidden");
     const gate = await loadGate();
@@ -73,6 +75,7 @@ export const updateGate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().trim().min(4).max(100), pass: z.string().min(6).max(200) }).parse(d))
   .handler(async ({ data, context }) => {
+    await assertNormalMode(context.supabase);
     const { data: admin } = await context.supabase.rpc("has_perm", { _perm: "gate" });
     if (!admin) throw new Error("Forbidden");
     await loadGate();

@@ -1,3 +1,4 @@
+import { assertNormalMode } from "@/lib/equipment-view";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -7,6 +8,7 @@ export const signAttachments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ ids: z.array(z.string().uuid()).max(200) }).parse(d))
   .handler(async ({ data, context }) => {
+    await assertNormalMode(context.supabase);
     if (data.ids.length === 0) return {} as Record<string, string>;
     // 利用者本人の権限（RLS）で見える添付だけに絞る
     const { data: rows } = await context.supabase
