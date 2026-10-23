@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useBlocker } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, CheckCircle2, ChevronLeft, ChevronRight, FileDown, LayoutList, Loader2, Plus, Search, Settings, Wrench } from "lucide-react";
 import { addMonths, format, parseISO } from "date-fns";
@@ -41,6 +41,7 @@ function EquipmentPage() {
   const request=useRef(0);
   const targetId=target??session?.user.id;
   const switched=!!target && target!==session?.user.id;
+  useBlocker({ shouldBlockFn: ({ next }) => (switched || switching) && next.pathname !== "/equipment", enableBeforeUnload: false });
   const readOnly=!!session && !!targetId && equipmentReadOnly(session.user.id,targetId,isAdmin);
   const changeTarget=async(id:string)=>{
     setSwitching(true);setLoading(true);request.current++;setItems([]);setHistory([]);setHistoryOf(null);setEditingRecord(null);setGroup(null);setView("list");
