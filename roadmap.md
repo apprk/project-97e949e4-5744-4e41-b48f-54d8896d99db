@@ -1,4 +1,7 @@
 # Work
+- [ ] Add equipment target 全部 excluding administrators, retaining monitoring security.
+- [ ] Show only a small latest completion date in collapsed history.
+- [ ] Fit purchase action columns to controls; add admin-only hidden-from-other-accounts checkbox with enforced visibility and tests.
 - [x] Add equipment-only account switching and server-enforced monitoring permissions; preserve existing data.
 - [x] Apply supplied browser, Android and iOS app icons; image sizes, live references and mobile public screen verified. Actual Android/iOS home-screen installation remains device-only verification.
 - [ ] Verify administrator/general account boundaries and real account switching. Blocked: current preview is signed out; user agreed to sign in as administrator. 46 focused tests pass; full authenticated reads, edits, ON/OFF and regression flows remain unverified; do not change existing account credentials or permissions for tests.
