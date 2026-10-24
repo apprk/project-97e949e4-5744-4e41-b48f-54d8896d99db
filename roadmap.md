@@ -1,7 +1,7 @@
 # Work
-- [ ] Add equipment-only account switching and server-enforced monitoring permissions; preserve existing data.
-- [ ] Apply supplied browser, Android and iOS app icons and verify references.
-- [ ] Verify administrator/general account boundaries and real account switching; report unavailable checks.
+- [x] Add equipment-only account switching and server-enforced monitoring permissions; preserve existing data.
+- [x] Apply supplied browser, Android and iOS app icons; image sizes, live references and mobile public screen verified. Actual Android/iOS home-screen installation remains device-only verification.
+- [ ] Verify administrator/general account boundaries and real account switching. Blocked: current preview is signed out; user agreed to sign in as administrator. 46 focused tests pass; full authenticated reads, edits, ON/OFF and regression flows remain unverified; do not change existing account credentials or permissions for tests.
 - [x] Add destination-only one-time administrator setup; eight auth/setup tests pass, existing administrator screen and permanently closed current setup verified.
 - [ ] Verify first registration in the new destination. Blocked: destination not connected here; needs additional migration and server-only ALLOW_INITIAL_ADMIN_SETUP=true there. Existing administrator credentials and unrelated pending verification remain unchanged.
 - [x] Remove hidden-login visual feedback; simplify purchase month title and blank administrator entry workplace. Four/five-tap browser flow verified.
